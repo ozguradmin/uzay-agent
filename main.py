@@ -18,6 +18,7 @@ import time
 import logging
 import random
 import dateutil.parser
+import json
 
 # .env dosyasındaki ortam değişkenlerini yükle
 load_dotenv()
@@ -88,59 +89,79 @@ def test_wordpress_connection():
             "message": f"WordPress'e bağlanırken bir hata oluştu: {e}"
         }), 500
 
-def search_google(query: str, num_results: int = 10, time_filter: str = None):
+def search_google(query: str, num_results: int = 10):
     """
-    Google Custom Search API kullanarak bir arama sorgusu gerçekleştirir.
-    time_filter: "qdr:d" (son 24 saat), "qdr:w" (son hafta), "qdr:m" (son ay)
+    Gemini'nin yerleşik 'google_search' aracını kullanarak bir arama sorgusu gerçekleştirir
+    ve son 24-48 saat içindeki sonuçları döndürür.
     """
-    api_key = os.getenv("GOOGLE_API_KEY")
-    search_engine_id = os.getenv("GOOGLE_SEARCH_ENGINE_ID")
+    logging.info(f"Gemini arama aracıyla sorgu yapılıyor: '{query}'")
+    gemini_api_key = os.getenv("GEMINI_API_KEY")
+    if not gemini_api_key:
+        raise ValueError("Gemini API anahtarı .env dosyasında eksik.")
 
-    if not api_key or not search_engine_id:
-        raise ValueError("Google API anahtarı veya Arama Motoru Kimliği eksik.")
+    # Araç kullanımını destekleyen bir model kullanılıyor
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_api_key}"
+    
+    headers = {'Content-Type': 'application/json'}
+
+    # Gemini'ye sonuçları nasıl formatlaması gerektiğini söyleyen sistem talimatı
+    system_prompt = """
+    Sen bir arama sonucu formatlama aracısın. Görevin, kullanıcının sorgusu için bir Google araması yapmak ve son 24-48 saatteki sonuçlara odaklanmaktır. En alakalı 7-10 sonucu döndür.
+    Yanıtını TEK BİR JSON nesnesi olarak formatlamalısın. Bu nesne "items" adında tek bir anahtar içermelidir.
+    "items" anahtarının değeri, her biri "title", "link" ve "snippet" anahtarlarına sahip nesnelerden oluşan bir dizi olmalıdır.
+    Alakalı sonuç bulamazsan, {"items": []} gibi boş bir "items" dizisi içeren bir nesne döndür.
+    JSON nesnesinden önce veya sonra herhangi bir metin veya markdown formatlaması ekleme.
+    """
+
+    payload = {
+        "contents": [{"parts": [{"text": query}]}],
+        "tools": [{"google_search": {}}],
+        "system_instruction": {"parts": [{"text": system_prompt}]}
+    }
 
     try:
-        service = build("customsearch", "v1", developerKey=api_key)
+        response = requests.post(url, headers=headers, json=payload, timeout=90)
+        response.raise_for_status()
         
-        # Arama parametreleri
-        search_params = {
-            'q': query,
-            'cx': search_engine_id,
-            'num': num_results,
-            'lr': 'lang_en',  # İngilizce sonuçlar için
-            'gl': 'us'  # ABD'den sonuçlar
-        }
+        response_json = response.json()
+        candidates = response_json.get('candidates', [])
         
-        # Zaman filtresi ekle
-        if time_filter:
-            search_params['dateRestrict'] = time_filter
+        if not (candidates and candidates[0].get('content', {}).get('parts', [])):
+            logging.error(f"Gemini arama aracından geçerli bir yanıt alınamadı. Ham yanıt: {response_json}")
+            raise ValueError("Gemini API'sinden arama aracıyla geçerli bir yanıt alınamadı.")
+
+        raw_text = candidates[0]['content']['parts'][0]['text']
         
-        logging.info(f"Google Custom Search API'ye gönderilen parametreler: {search_params}")
-        result = service.cse().list(**search_params).execute()
+        # Yanıtı temizleyerek sadece JSON'u al
+        json_start = raw_text.find('{')
+        json_end = raw_text.rfind('}')
+        if json_start == -1 or json_end == -1:
+            logging.error(f"API yanıtında beklenen JSON formatı bulunamadı. Gelen yanıt: {raw_text}")
+            return [] # Boş liste döndür
+            
+        json_string = raw_text[json_start:json_end + 1]
+        data = json.loads(json_string)
         
-        found_items = result.get('items', [])
+        found_items = data.get("items", [])
         if found_items:
             for i, item in enumerate(found_items):
-                # Yayın tarihini pagemap'ten çıkarmaya çalış
-                publication_date = "Tarih Yok"
-                if 'pagemap' in item and 'metatags' in item['pagemap']:
-                    metatags = item['pagemap']['metatags'][0]
-                    if 'article:published_time' in metatags:
-                        publication_date = metatags['article:published_time']
-                    elif 'datepublished' in metatags:
-                        publication_date = metatags['datepublished']
-                    elif 'og:updated_time' in metatags:
-                        publication_date = metatags['og:updated_time']
-                    elif 'last-modified' in metatags:
-                        publication_date = metatags['last-modified']
-
-                logging.info(f"  Google Arama Sonucu {i+1}: Başlık='{item.get('title')}', Link='{item.get('link')}', Tarih='{publication_date}'")
+                 logging.info(f"  Gemini Arama Sonucu {i+1}: Başlık='{item.get('title')}', Link='{item.get('link')}'")
         else:
-            logging.info("  Google aramasında sonuç bulunamadı.")
-        
+            logging.info("  Gemini aramasında sonuç bulunamadı.")
+            
         return found_items
+
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Gemini arama aracıyla arama sırasında bir hata oluştu: {e}")
+        if e.response:
+            logging.error(f"Hata detayı: {e.response.text}")
+        return []
+    except json.JSONDecodeError as e:
+        logging.error(f"Gemini'den dönen JSON yanıtı ayrıştırılamadı: {e}")
+        logging.error(f"Ayrıştırılamayan metin: {raw_text}")
+        return []
     except Exception as e:
-        logging.error(f"Google araması sırasında bir hata oluştu: {e}")
+        logging.error(f"Gemini arama sırasında beklenmedik bir hata: {e}")
         return []
 
 @app.route('/search', methods=['POST'])
@@ -507,58 +528,15 @@ def generate_and_post_logic(topic: str, schedule_time: str = None):
         english_query = generate_content_with_gemini(translation_prompt).strip()
         logging.info(f"İngilizce sorgu oluşturuldu: '{english_query}'")
 
-        # 2. Adım: Araştırma (önce son 24 saat, sonra son 1 hafta)
-        logging.info(f"'{english_query}' sorgusu için son 24 saatte araştırma yapılıyor...")
-        search_results = search_google(english_query, time_filter="qdr:d")
+        # 2. Adım: Gemini'nin arama aracıyla araştırma yap
+        logging.info(f"'{english_query}' sorgusu için Gemini arama aracıyla son 24-48 saatte araştırma yapılıyor...")
+        search_results = search_google(english_query)
         
-        # Uygulama tarafında 24 saatlik filtreleme yap
-        filtered_results = []
-        now = datetime.now(timezone.utc) # UTC olarak güncel zaman
-        
-        for item in search_results:
-            publication_date_str = "Tarih Yok"
-            if 'pagemap' in item and 'metatags' in item['pagemap']:
-                metatags = item['pagemap']['metatags'][0]
-                if 'article:published_time' in metatags:
-                    publication_date_str = metatags['article:published_time']
-                elif 'datepublished' in metatags:
-                    publication_date_str = metatags['datepublished']
-                elif 'og:updated_time' in metatags:
-                    publication_date_str = metatags['og:updated_time']
-                elif 'last-modified' in metatags:
-                    publication_date_str = metatags['last-modified']
-            
-            try:
-                parsed_date = None
-                if publication_date_str != "Tarih Yok":
-                    try:
-                        parsed_date = dateutil.parser.parse(publication_date_str)
-                        # Tarihi UTC'ye dönüştür
-                        if parsed_date.tzinfo is None:
-                            parsed_date = parsed_date.replace(tzinfo=timezone.utc)
-                        else:
-                            parsed_date = parsed_date.astimezone(timezone.utc)
-                    except ValueError:
-                        logging.info(f"    -> Tarih ayrıştırılamadı (dateutil.parser): Başlık='{item.get('title')}', Ham Tarih='{publication_date_str}'")
-                        parsed_date = None # Ayrıştırma başarısız olursa None olarak ayarla
-                
-                if parsed_date:
-                    # Son 24 saati kontrol et
-                    if now - timedelta(hours=24) <= parsed_date <= now:
-                        filtered_results.append(item)
-                        logging.info(f"    -> Güncel (son 24 saat içinde): Başlık='{item.get('title')}', Tarih='{publication_date_str}'")
-                    else:
-                        logging.info(f"    -> Güncel Değil (eski): Başlık='{item.get('title')}', Tarih='{publication_date_str}'")
-                else:
-                    logging.info(f"    -> Tarih ayrıştırılamadı veya güncel değil: Başlık='{item.get('title')}', Ham Tarih='{publication_date_str}'")
-            except Exception as e:
-                logging.error(f"Tarih ayrıştırma veya filtreleme sırasında hata: {e}. Başlık='{item.get('title')}', Ham Tarih='{publication_date_str}'")
-        
-        if not filtered_results:
-            logging.info(f"'{english_query}' için son 24 saatte güncel sonuç bulunamadı. Konu atlanıyor.")
+        if not search_results:
+            logging.info(f"'{english_query}' için son 24-48 saatte güncel sonuç bulunamadı. Konu atlanıyor.")
             return # jsonify döndürme
 
-        simplified_results = [{"title": item.get('title'), "link": item.get('link')} for item in filtered_results]
+        simplified_results = [{"title": item.get('title'), "link": item.get('link')} for item in search_results]
         sources_text = "\n".join([f"- {result['title']}: {result['link']}" for result in simplified_results])
 
         # 3. Adım: İçerik Üretme
@@ -743,19 +721,33 @@ def post_nasa_apod_logic(schedule_time: str = None):
         apod_data = get_nasa_apod()
         if not apod_data or 'url' not in apod_data:
             logging.error("NASA'dan APOD verisi alınamadı.")
-            raise ValueError("NASA APOD verisi alınamadı.")
+            return None
 
-        if apod_data.get("media_type") != "image":
-            logging.warning(f"Bugünün APOD içeriği bir görsel değil, bir {apod_data.get('media_type')}. İşlem atlandı.")
-            return None # jsonify döndürme
+        # APOD verisinin bugüne ait ve bir görsel olup olmadığını kontrol et
+        today_date_str = datetime.now().strftime("%Y-%m-%d")
+        apod_date = apod_data.get('date')
+        media_type = apod_data.get("media_type")
+
+        if apod_date != today_date_str:
+            logging.warning(f"Bugünün APOD içeriği mevcut değil. Gelen tarih: {apod_date}, Beklenen tarih: {today_date_str}. İşlem atlandı.")
+            return None
+        
+        if media_type != "image":
+            logging.warning(f"Bugünün APOD içeriği bir görsel değil, bir '{media_type}'. İşlem atlandı.")
+            return None
             
         # 2. Adım: İçeriği Gemini ile zenginleştir
         logging.info("NASA içeriği Gemini'ye gönderiliyor...")
-        ingilizce_baslik = apod_data['title']
-        ingilizce_aciklama = apod_data['explanation']
-
+        # NASA'dan gelen başlık ve açıklamayı prompt'a ekle
+        ingilizce_baslik = apod_data.get('title', 'Başlık Yok')
+        ingilizce_aciklama = apod_data.get('explanation', 'Açıklama Yok')
+        
         prompt = f"""
         Sen, galaktikuzay.com için yazan, Neil deGrasse Tyson gibi karmaşık konuları basit ve heyecan verici bir dille anlatan bir bilim iletişimcisisin. Görevin, sana verilen NASA verilerini analiz edip, SEO uyumlu, yapılandırılmış bir blog yazısı verisi oluşturmak.
+
+        **VERİLEN NASA BİLGİLERİ:**
+        - Başlık: {ingilizce_baslik}
+        - Açıklama: {ingilizce_aciklama}
 
         **KESİN KURALLAR:**
         1.  **SEO Başlığı:** 65 karakteri geçmeyen, merak uyandıran ve SADECE fotoğrafın konusunu açıklayan bir Türkçe başlık üret. 
@@ -872,11 +864,12 @@ def post_nasa_apod_logic(schedule_time: str = None):
     
     except ValueError as e:
         logging.error(f"post_nasa_apod_logic sırasında bir hata oluştu: {e}")
-        raise # Hatayı yeniden fırlat
+        return None
     except Exception as e:
         logging.error(f"İşlem sırasında beklenmedik bir hata oluştu: {e}")
-        raise # Hatayı yeniden fırlat
-    logging.info("[LOG] post_nasa_apod_logic BİTTİ")
+        return None
+    finally:
+        logging.info("[LOG] post_nasa_apod_logic BİTTİ")
 
 
 def get_wordpress_posts(limit=100):
@@ -946,22 +939,19 @@ def discover_trending_topics():
         
         all_results = []
         
-        for term in search_terms:
-            logging.info(f"'{term}' aranıyor...")
-            results = search_google(term, num_results=10, time_filter="qdr:d")  # Her terimden daha fazla sonuç al
-            if results:
-                all_results.extend(results)  # Tüm sonuçları ekle, sonra Gemini filtreleyecek
+        # Arama terimlerini tek bir büyük sorguda birleştirelim
+        # Bu, Gemini'ye daha geniş bir bağlam sunar ve daha iyi konular seçmesine yardımcı olabilir
+        combined_query = " OR ".join(f'"{term}"' for term in search_terms)
+        logging.info(f"Birleştirilmiş sorgu ile en son uzay haberleri aranıyor...")
+        all_results = search_google(combined_query, num_results=10)
         
         # Sonuçları Gemini'ye gönder ve ilgi çekici konuları filtrele
         if all_results:
             # Sadece ilk 10 sonucu Gemini'ye gönder, çok uzun olmaması için
-            logging.info(f"Gemini'ye gönderilen ham arama sonuçları: {chr(10).join([f'  - {item.get('title', '')} ({item.get('link', '')})' for item in all_results[:10]])}")
-            topics_prompt = f"""
-            Sen bir uzay ve astronomi içerik editörüsün. Aşağıdaki güncel haberleri analiz et ve galaktikuzay.com için en ilgi çekici 3 konuyu seç.
-            
-            ÖNEMLİ: Bu konular NASA APOD'dan TAMAMEN FARKLI olmalı. NASA APOD zaten günlük astronomi fotoğrafı için kullanılıyor.
-            
-            Seçim kriterleri:
+            news_items_text = "\n".join([f"- {item.get('title', '')}: {item.get('link', '')}" for item in all_results[:10]])
+            logging.info(f"Gemini'ye gönderilen ham arama sonuçları:\n{news_items_text}")
+
+            criteria = """Seçim kriterleri:
             1. Türkçe okuyucular için anlaşılır olmalı
             2. Görsel içerik üretilebilir olmalı
             3. SEO dostu olmalı
@@ -969,13 +959,18 @@ def discover_trending_topics():
             5. BİRBİRİNDEN TAMAMEN FARKLI KONULAR OLMALI - Aynı gezegen, aynı konu olmasın
             6. NASA APOD'dan FARKLI olmalı - Mars keşifleri, Perseverance, Curiosity gibi NASA APOD konuları seçme
             7. Çeşitlilik: Jüpiter, Satürn, kara delik, yıldız, galaksi, uzay teknolojisi, meteor yağmurları, exoplanet gibi farklı alanlar
-            8. Güncel haberler - son 24 saat içindeki gelişmeler
+            8. Güncel haberler - son 24 saat içindeki gelişmeler"""
+
+            topics_prompt = f"""Sen bir uzay ve astronomi içerik editörüsün. Aşağıdaki güncel haberleri analiz et ve galaktikuzay.com için en ilgi çekici 3 konuyu seç.
             
-            Haberler:
-            {chr(10).join([f"- {item.get('title', '')}: {item.get('link', '')}" for item in all_results[:10]])}
+ÖNEMLİ: Bu konular NASA APOD'dan TAMAMEN FARKLI olmalı. NASA APOD zaten günlük astronomi fotoğrafı için kullanılıyor.
             
-            Sadece konu başlıklarını, her satırda bir tane olacak şekilde listele. Açıklama ekleme.
-            """
+{criteria}
+            
+Haberler:
+{news_items_text}
+            
+Sadece konu başlıklarını, her satırda bir tane olacak şekilde listele. Açıklama ekleme."""
             
             logging.info(f"Gemini'ye gönderilen konu keşfi promptu: \n---\n{topics_prompt}\n---")
             topics_response = generate_content_with_gemini(topics_prompt)
