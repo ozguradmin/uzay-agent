@@ -100,7 +100,7 @@ def search_google(query: str, num_results: int = 10):
         raise ValueError("Gemini API anahtarı .env dosyasında eksik.")
 
     # Araç kullanımını destekleyen bir model kullanılıyor
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key={gemini_api_key}"
     
     headers = {'Content-Type': 'application/json'}
 
