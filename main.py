@@ -23,6 +23,9 @@ load_dotenv()
 
 app = Flask(__name__)
 
+# Zamanlayıcıyı global olarak tanımla
+scheduler = BackgroundScheduler(daemon=True)
+
 @app.route('/')
 def admin_panel():
     """Admin panelinin ana sayfasını gösterir."""
@@ -641,42 +644,61 @@ def generate_and_post_logic(topic: str, schedule_time: str = None):
 @app.route('/generate-and-post', methods=['POST'])
 def generate_and_post_endpoint():
     """
-    Bir konu alır, araştırır, içerik üretir ve WordPress'e gönderir.
-    Panelden gelen manuel istekleri işler.
+    Panelden gelen manuel bir içerik üretim isteğini alır ve
+    bu görevi arka planda çalışması için zamanlayıcıya ekler.
     """
     data = request.json
     topic = data.get('topic')
-    schedule_time_str = data.get('schedule_time') # Panelden gelen zaman (örn: 2025-09-29T14:30)
+    schedule_time_str = data.get('schedule_time')
 
     if not topic:
         return jsonify({"error": "Lütfen bir içerik konusu belirtin."}), 400
     
-    final_schedule_time = None
-    if schedule_time_str:
-        # Gelen string'i datetime objesine çevir ve ISO formata getir
-        final_schedule_time = datetime.fromisoformat(schedule_time_str).isoformat()
-    else:
-        # Eğer zaman belirtilmemişse, en yakın uygun zamanı bul ve ata
-        now = datetime.now()
-        smart_times = get_smart_schedule_times()
-        for t in smart_times:
-            # Gelecekteki ilk uygun zamanı bul
-            if datetime.fromisoformat(t) > now:
-                final_schedule_time = t
-                break
-        # Eğer hepsi geçmişte kaldıysa, ertesi günün ilk saatini ata
-        if not final_schedule_time:
-            final_schedule_time = (now + timedelta(days=1)).replace(hour=8, minute=45).isoformat()
+    # Görevi hemen şimdi çalışması için zamanlayıcıya ekle
+    scheduler.add_job(
+        generate_and_post_logic_with_context, 
+        'date', 
+        run_date=datetime.now() + timedelta(seconds=1), 
+        args=[topic, schedule_time_str]
+    )
 
-    try:
-        # Mantık fonksiyonunu belirlenen zamanlama ile çağır
-        generate_and_post_logic(topic, schedule_time=final_schedule_time)
-        return jsonify({
-            "status": "success", 
-            "message": f"'{topic}' konusu başarıyla işlendi ve {final_schedule_time} tarihine zamanlandı."
-        })
-    except Exception as e:
-        return jsonify({"error": f"İçerik üretimi sırasında hata: {e}"}), 500
+    return jsonify({
+        "status": "success", 
+        "message": f"'{topic}' konusu için içerik üretme görevi arka plana alındı. Birkaç dakika içinde 'Zamanlanmış Gönderiler' listesinde görebilirsiniz."
+    })
+
+def generate_and_post_logic_with_context(topic: str, schedule_time_str: str = None):
+    """
+    Flask uygulama bağlamı (app context) içinde generate_and_post_logic'i çalıştırır.
+    Zamanlayıcı tarafından çağrılmak için gereklidir.
+    """
+    with app.app_context():
+        final_schedule_time = None
+        if schedule_time_str:
+            # Gelen string'i datetime objesine çevir ve ISO formata getir
+            final_schedule_time = datetime.fromisoformat(schedule_time_str).isoformat()
+        else:
+            # Eğer zaman belirtilmemişse, en yakın uygun zamanı bul ve ata
+            now = datetime.now()
+            smart_times = get_smart_schedule_times()
+            for t in smart_times:
+                # Gelecekteki ilk uygun zamanı bul
+                if datetime.fromisoformat(t) > now:
+                    final_schedule_time = t
+                    break
+            # Eğer hepsi geçmişte kaldıysa, ertesi günün ilk saatini ata
+            if not final_schedule_time:
+                final_schedule_time = (now + timedelta(days=1)).replace(hour=8, minute=45).isoformat()
+
+        try:
+            # Mantık fonksiyonunu belirlenen zamanlama ile çağır
+            generate_and_post_logic(topic, schedule_time=final_schedule_time)
+            return jsonify({
+                "status": "success", 
+                "message": f"'{topic}' konusu başarıyla işlendi ve {final_schedule_time} tarihine zamanlandı."
+            })
+        except Exception as e:
+            return jsonify({"error": f"İçerik üretimi sırasında hata: {e}"}), 500
 
 def post_nasa_apod_logic(schedule_time: str = None):
     """
@@ -1005,14 +1027,14 @@ def generate_daily_content_endpoint():
     Günlük içerik üretimini manuel olarak tetiklemek için endpoint.
     """
     # Süreci arka planda başlat
-    scheduler.add_job(trigger_daily_content_generation)
+    scheduler.add_job(trigger_daily_content_generation_with_context)
     return jsonify({
         "status": "success",
         "message": "Günlük içerik üretim süreci arka planda başlatıldı. Terminal loglarını kontrol edin."
     })
 
 
-def trigger_daily_content_generation():
+def trigger_daily_content_generation_with_context():
     """
     Tüm günlük içerik üretim sürecini başlatan ana fonksiyon.
     Hem zamanlayıcı hem de manuel istek tarafından çağrılabilir.
@@ -1063,7 +1085,7 @@ def trigger_daily_content_generation():
             try:
                 post_schedule_time = schedule_times[published_google_posts + 1]
                 # Doğrudan fonksiyonu çağır ve zamanlama bilgisini gönder
-                generate_and_post_logic(topic, schedule_time=post_schedule_time)
+                generate_and_post_logic_with_context(topic, schedule_time_str=post_schedule_time)
                 
                 print(f"\n--- Konu '{topic}' Başarıyla Zamanlandı: {post_schedule_time} ---\n")
                 published_google_posts += 1 # Başarılı yayın sayısını artır
@@ -1082,8 +1104,7 @@ def trigger_daily_content_generation():
 
 if __name__ == '__main__':
     # Zamanlayıcıyı kur ve Flask uygulamasını arka planda çalışacak şekilde başlat
-    scheduler = BackgroundScheduler(daemon=True)
-    scheduler.add_job(trigger_daily_content_generation, 'cron', hour=8, minute=45)
+    scheduler.add_job(trigger_daily_content_generation_with_context, 'cron', hour=8, minute=45)
     scheduler.start()
 
     # Uygulama kapatıldığında zamanlayıcıyı güvenli bir şekilde kapat
