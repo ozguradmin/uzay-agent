@@ -482,15 +482,8 @@ def generate_and_post_logic(topic: str, schedule_time: str = None):
         search_results = search_google(english_query, time_filter="qdr:d")
         
         if not search_results:
-            logging.info(f"'{english_query}' için son 24 saatte sonuç bulunamadı, son 1 hafta deneniyor...")
-            search_results = search_google(english_query, time_filter="qdr:w")
-
-        if not search_results:
-            logging.info(f"'{english_query}' için son 1 haftada sonuç bulunamadı, konu atlanıyor.")
-            return jsonify({
-                "status": "skipped",
-                "message": "Konu güncel değil veya son 1 haftada kaynak bulunamadı."
-            }), 200
+            logging.info(f"'{english_query}' için son 24 saatte sonuç bulunamadı. Konu atlanıyor.")
+            return # jsonify döndürme
 
         simplified_results = [{"title": item.get('title'), "link": item.get('link')} for item in search_results]
         sources_text = "\n".join([f"- {result['title']}: {result['link']}" for result in simplified_results])
@@ -627,11 +620,7 @@ def generate_and_post_logic(topic: str, schedule_time: str = None):
             schedule_time=schedule_time
         )
 
-        return jsonify({
-            "status": "success",
-            "message": "İçerik başarıyla üretildi ve WordPress'e taslak olarak gönderildi!",
-            "post_url": post_details.get('_links', {}).get('self', [{}])[0].get('href')
-        })
+        return True # Başarılı olduğunu belirtmek için True döndür
 
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
@@ -681,14 +670,11 @@ def post_nasa_apod_logic(schedule_time: str = None):
         apod_data = get_nasa_apod()
         if not apod_data or 'url' not in apod_data:
             logging.error("NASA'dan APOD verisi alınamadı.")
-            return jsonify({"error": "NASA'dan APOD verisi alınamadı."}), 502
+            raise ValueError("NASA APOD verisi alınamadı.")
 
         if apod_data.get("media_type") != "image":
             logging.warning(f"Bugünün APOD içeriği bir görsel değil, bir {apod_data.get('media_type')}. İşlem atlandı.")
-            return jsonify({
-                "status": "skipped",
-                "message": f"Bugünün APOD içeriği bir görsel değil, bir {apod_data.get('media_type')}. İşlem atlandı."
-            }), 200
+            return None # jsonify döndürme
             
         # 2. Adım: İçeriği Gemini ile zenginleştir
         logging.info("NASA içeriği Gemini'ye gönderiliyor...")
@@ -812,10 +798,10 @@ def post_nasa_apod_logic(schedule_time: str = None):
     
     except ValueError as e:
         logging.error(f"post_nasa_apod_logic sırasında bir hata oluştu: {e}")
-        return jsonify({"error": str(e)}), 400
+        raise # Hatayı yeniden fırlat
     except Exception as e:
         logging.error(f"İşlem sırasında beklenmedik bir hata oluştu: {e}")
-        return jsonify({"error": f"İşlem sırasında beklenmedik bir hata oluştu: {e}"}), 500
+        raise # Hatayı yeniden fırlat
     logging.info("[LOG] post_nasa_apod_logic BİTTİ")
 
 
@@ -1009,10 +995,11 @@ def trigger_daily_content_generation():
         logging.info("\n=== 1/4: NASA APOD İçeriği Üretiliyor ve Zamanlanıyor ===\n")
         try:
             # Yerel URL'ye istek göndermek yerine doğrudan fonksiyonu çağır
-            post_nasa_apod_logic_with_context(schedule_time=schedule_times[0])
-            logging.info(f"\n--- NASA APOD İçeriği Başarıyla Zamanlandı: {schedule_times[0]} ---\n")
+            logging.info(f"NASA APOD içeriği oluşturuluyor ve {schedule_times[0]} tarihine zamanlanıyor.")
+            post_nasa_apod_logic(schedule_time=schedule_times[0])
+            logging.info(f"NASA APOD içeriği başarıyla oluşturuldu ve {schedule_times[0]} tarihine zamanlandı.")
         except Exception as e:
-            logging.error(f"\n*** HATA: NASA APOD İçeriği Üretilemedi: {e} ***\n")
+            logging.error(f"NASA APOD içeriği oluşturulurken veya zamanlanırken hata oluştu: {e}")
 
         # 2. Mevcut yazıları kontrol et
         logging.info("\n=== 2/4: Mevcut Yazılar Kontrol Ediliyor ===\n")
