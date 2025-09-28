@@ -1055,28 +1055,17 @@ def trigger_daily_content_generation():
     print("="*50)
 
 
-def run_scheduler():
-    """Sadece zamanlayıcıyı çalıştırır ve sonsuza kadar bekler."""
+if __name__ == '__main__':
+    # Zamanlayıcıyı kur ve Flask uygulamasını arka planda çalışacak şekilde başlat
     scheduler = BackgroundScheduler(daemon=True)
     scheduler.add_job(trigger_daily_content_generation, 'cron', hour=8, minute=45)
     scheduler.start()
-    print("Zamanlayıcı başlatıldı. Program çalışmaya devam ediyor...")
-    try:
-        # Zamanlayıcının çalışmaya devam etmesi için ana thread'i canlı tut
-        while True:
-            time.sleep(2)
-    except (KeyboardInterrupt, SystemExit):
-        scheduler.shutdown()
 
-if __name__ == '__main__':
-    # Render üzerinde hangi servisin çalışacağını belirlemek için ortam değişkenini kontrol et
-    SERVICE_TYPE = os.environ.get('SERVICE_TYPE', 'web')
+    # Uygulama kapatıldığında zamanlayıcıyı güvenli bir şekilde kapat
+    atexit.register(lambda: scheduler.shutdown())
 
-    if SERVICE_TYPE == 'worker':
-        run_scheduler()
-    else:
-        # Web servisini (Flask uygulamasını) başlat
-        port = int(os.environ.get('PORT', 5000))
-        # Gunicorn için app objesinin erişilebilir olması gerekiyor, bu yüzden app.run'ı __main__ bloğunda bırakıyoruz.
-        # Render Gunicorn'u doğrudan çalıştıracak.
-        app.run(host='0.0.0.0', port=port, debug=True, use_reloader=False)
+    # Web servisini (Flask uygulamasını) başlat
+    port = int(os.environ.get('PORT', 5000))
+    # Render Gunicorn'u doğrudan çalıştıracak, bu yüzden app.run yerel testler için kalıyor.
+    # debug=False üretim için daha uygundur.
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
