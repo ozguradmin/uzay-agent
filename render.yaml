@@ -4,7 +4,7 @@ services:
     name: uzay-agent
     env: python
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn --timeout 300 'main:app'"
+    startCommand: "gunicorn --worker-class gevent --timeout 300 'main:app'"
     envVars:
       - fromGroup: uzay-agent-secrets
 

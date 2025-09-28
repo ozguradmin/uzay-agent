@@ -17,6 +17,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import atexit
 import random
 import time
+from gevent import monkey
+monkey.patch_all()
 
 # .env dosyasındaki ortam değişkenlerini yükle
 load_dotenv()
