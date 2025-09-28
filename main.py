@@ -1031,9 +1031,13 @@ def generate_daily_content_endpoint():
 
 def trigger_daily_content_generation_with_context():
     """
-    Tüm günlük içerik üretim sürecini başlatan ana fonksiyon.
-    Hem zamanlayıcı hem de manuel istek tarafından çağrılabilir.
+    Flask uygulama bağlamı (app context) içinde trigger_daily_content_generation'ı çalıştırır.
+    Zamanlayıcı tarafından çağrılmak için gereklidir.
     """
+    with app.app_context():
+        trigger_daily_content_generation()
+
+def trigger_daily_content_generation():
     print("="*50)
     print(f"OTOMATİK GÜNLÜK İÇERİK ÜRETİMİ BAŞLATILDI - {datetime.now()}")
     print("="*50)
@@ -1048,7 +1052,7 @@ def trigger_daily_content_generation_with_context():
         print("\n=== 1/4: NASA APOD İçeriği Üretiliyor ve Zamanlanıyor ===\n")
         try:
             # Yerel URL'ye istek göndermek yerine doğrudan fonksiyonu çağır
-            post_nasa_apod_logic(schedule_time=schedule_times[0])
+            post_nasa_apod_logic_with_context(schedule_time=schedule_times[0])
             print(f"\n--- NASA APOD İçeriği Başarıyla Zamanlandı: {schedule_times[0]} ---\n")
         except Exception as e:
             print(f"\n*** HATA: NASA APOD İçeriği Üretilemedi: {e} ***\n")
