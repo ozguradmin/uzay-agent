@@ -1111,16 +1111,17 @@ def trigger_daily_content_generation():
     logging.info("="*50)
 
 
+# Zamanlayıcıyı KUR ve BAŞLAT (Gunicorn'un erişebileceği yer)
+# ----------------------------------------------------------------
+scheduler.add_job(trigger_daily_content_generation_with_context, 'cron', hour=8, minute=45)
+scheduler.start()
+
+# Uygulama kapatıldığında zamanlayıcıyı güvenli bir şekilde kapat
+atexit.register(lambda: scheduler.shutdown())
+# ----------------------------------------------------------------
+
 if __name__ == '__main__':
-    # Zamanlayıcıyı kur ve Flask uygulamasını arka planda çalışacak şekilde başlat
-    scheduler.add_job(trigger_daily_content_generation_with_context, 'cron', hour=8, minute=45)
-    scheduler.start()
-
-    # Uygulama kapatıldığında zamanlayıcıyı güvenli bir şekilde kapat
-    atexit.register(lambda: scheduler.shutdown())
-
-    # Web servisini (Flask uygulamasını) başlat
+    # Bu blok artık sadece bilgisayarınızda yerel test için kullanılacak.
+    # Render bu kısmı çalıştırmaz.
     port = int(os.environ.get('PORT', 5000))
-    # Render Gunicorn'u doğrudan çalıştıracak, bu yüzden app.run yerel testler için kalıyor.
-    # debug=False üretim için daha uygundur.
     app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
