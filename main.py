@@ -17,9 +17,13 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import atexit
 import random
 import time
+import logging
 
 # .env dosyasındaki ortam değişkenlerini yükle
 load_dotenv()
+
+# logging'i ayarla
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 app = Flask(__name__)
 
@@ -117,7 +121,7 @@ def search_google(query: str, num_results: int = 5, time_filter: str = None):
         result = service.cse().list(**search_params).execute()
         return result.get('items', [])
     except Exception as e:
-        print(f"Google araması sırasında bir hata oluştu: {e}")
+        logging.error(f"Google araması sırasında bir hata oluştu: {e}")
         return []
 
 @app.route('/search', methods=['POST'])
@@ -181,23 +185,23 @@ def generate_content_with_gemini(prompt: str):
             raise ValueError("Gemini API'sinden geçerli bir yanıt alınamadı.")
             
     except requests.exceptions.RequestException as e:
-        print(f"Gemini API'sine istek gönderirken hata oluştu: {e}")
-        print(f"Yanıt içeriği: {e.response.text if e.response else 'Yanıt yok'}")
+        logging.error(f"Gemini API'sine istek gönderirken hata oluştu: {e}")
+        logging.error(f"Yanıt içeriği: {e.response.text if e.response else 'Yanıt yok'}")
         raise
     except Exception as e:
-        print(f"Gemini ile içerik üretirken hata oluştu: {e}")
+        logging.error(f"Gemini ile içerik üretirken hata oluştu: {e}")
         raise
 
 def generate_ai_image(prompt: str):
     """
     Gemini 2.5 Flash Image Preview modeli kullanarak AI görseli üretir.
     """
-    print(f"AI görseli üretiliyor: '{prompt[:70]}...'")
+    logging.info(f"AI görseli üretiliyor: '{prompt[:70]}...'")
     
     try:
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
-            print("!!! HATA: GEMINI_API_KEY bulunamadı")
+            logging.error("!!! HATA: GEMINI_API_KEY bulunamadı")
             return None
 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key={api_key}"
@@ -226,14 +230,14 @@ def generate_ai_image(prompt: str):
                 for part in candidate['content']['parts']:
                     if 'inlineData' in part and 'data' in part['inlineData']:
                         image_bytes = base64.b64decode(part['inlineData']['data'])
-                        print("AI görseli başarıyla üretildi.")
+                        logging.info("AI görseli başarıyla üretildi.")
                         return image_bytes
         
-        print("!!! HATA: AI görseli üretilemedi - yanıt formatı beklenmeyen")
+        logging.error("!!! HATA: AI görseli üretilemedi - yanıt formatı beklenmeyen")
         return None
 
     except Exception as e:
-        print(f"!!! HATA: AI görseli üretilemedi: {e}")
+        logging.error(f"!!! HATA: AI görseli üretilemedi: {e}")
         return None
 
 def markdown_to_html_links(text):
@@ -317,11 +321,11 @@ def upload_image_to_wordpress(title: str, image_url: str = None, image_data: byt
             image_name = image_url.split("/")[-1]
             image_content = image_response.content
         except requests.exceptions.RequestException as e:
-            print(f"Görsel indirilirken hata: {e}")
+            logging.error(f"Görsel indirilirken hata: {e}")
             return None
     
     if not image_content:
-        print("Yüklenecek görsel verisi bulunamadı.")
+        logging.error("Yüklenecek görsel verisi bulunamadı.")
         return None
 
     # Pillow ile görsel optimizasyonu
@@ -340,7 +344,7 @@ def upload_image_to_wordpress(title: str, image_url: str = None, image_data: byt
         optimized_image_data = output_buffer.getvalue()
 
     except Exception as e:
-        print(f"Görsel işlenirken hata (Pillow): {e}")
+        logging.error(f"Görsel işlenirken hata (Pillow): {e}")
         return None
 
     # WordPress'e yükle
@@ -356,14 +360,14 @@ def upload_image_to_wordpress(title: str, image_url: str = None, image_data: byt
         upload_response = requests.post(media_api_url, headers=headers, data=optimized_image_data, timeout=60)
         upload_response.raise_for_status()
         media_data = upload_response.json()
-        print(f"Görsel başarıyla yüklendi. Media ID: {media_data['id']}")
+        logging.info(f"Görsel başarıyla yüklendi. Media ID: {media_data['id']}")
         return {
             "id": media_data['id'],
             "url": media_data['source_url']
         }
     except requests.exceptions.RequestException as e:
-        print(f"Görsel WordPress'e yüklenirken hata: {e}")
-        print(f"Hata detayı: {e.response.text if e.response else 'Yanıt yok'}")
+        logging.error(f"Görsel WordPress'e yüklenirken hata: {e}")
+        logging.error(f"Hata detayı: {e.response.text if e.response else 'Yanıt yok'}")
         return None
 
 def get_nasa_apod():
@@ -381,7 +385,7 @@ def get_nasa_apod():
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
-        print(f"NASA APOD API'sine bağlanırken hata oluştu: {e}")
+        logging.error(f"NASA APOD API'sine bağlanırken hata oluştu: {e}")
         return None
 
 def post_to_wordpress(title: str, content: str, featured_media_id: int = None, meta_description: str = None, schedule_time: str = None):
@@ -467,26 +471,26 @@ def generate_and_post_logic(topic: str, schedule_time: str = None):
     `generate_and_post` endpoint'inin ana mantığını içerir. Artık jsonify DÖNDÜRMÜYOR.
     """
     if not topic:
-        print("HATA: Konu belirtilmedi.")
+        logging.error("HATA: Konu belirtilmedi.")
         return
 
     try:
         # 1. Adım: Konuyu İngilizce'ye çevir
-        print(f"'{topic}' konusu İngilizce'ye çevriliyor...")
+        logging.info(f"'{topic}' konusu İngilizce'ye çevriliyor...")
         translation_prompt = f"Aşağıdaki Türkçe astronomi haber başlığını, Google'da en iyi sonuçları bulacak şekilde etkili bir İngilizce arama sorgusuna çevir. Sadece çevrilmiş sorguyu döndür, başka bir şey yazma.\n\nTÜRKÇE BAŞLIK: {topic}"
         english_query = generate_content_with_gemini(translation_prompt).strip()
-        print(f"İngilizce sorgu oluşturuldu: '{english_query}'")
+        logging.info(f"İngilizce sorgu oluşturuldu: '{english_query}'")
 
         # 2. Adım: Araştırma (önce son 24 saat, sonra son 1 hafta)
-        print(f"'{english_query}' sorgusu için son 24 saatte araştırma yapılıyor...")
+        logging.info(f"'{english_query}' sorgusu için son 24 saatte araştırma yapılıyor...")
         search_results = search_google(english_query, time_filter="qdr:d")
         
         if not search_results:
-            print(f"'{english_query}' için son 24 saatte sonuç bulunamadı, son 1 hafta deneniyor...")
+            logging.info(f"'{english_query}' için son 24 saatte sonuç bulunamadı, son 1 hafta deneniyor...")
             search_results = search_google(english_query, time_filter="qdr:w")
 
         if not search_results:
-            print(f"'{english_query}' için son 1 haftada sonuç bulunamadı, konu atlanıyor.")
+            logging.info(f"'{english_query}' için son 1 haftada sonuç bulunamadı, konu atlanıyor.")
             return jsonify({
                 "status": "skipped",
                 "message": "Konu güncel değil veya son 1 haftada kaynak bulunamadı."
@@ -496,7 +500,7 @@ def generate_and_post_logic(topic: str, schedule_time: str = None):
         sources_text = "\n".join([f"- {result['title']}: {result['link']}" for result in simplified_results])
 
         # 3. Adım: İçerik Üretme
-        print("Arama sonuçları Gemini'ye gönderiliyor ve içerik üretiliyor...")
+        logging.info("Arama sonuçları Gemini'ye gönderiliyor ve içerik üretiliyor...")
 
         prompt = f"""
         Sen, galaktikuzay.com için yazan, Neil deGrasse Tyson gibi karmaşık konuları basit ve heyecan verici bir dille anlatan bir bilim iletişimcisisin. Görevin, verilen konuyu analiz edip, SEO uyumlu, yapılandırılmış bir blog yazısı verisi oluşturmak.
@@ -584,7 +588,7 @@ def generate_and_post_logic(topic: str, schedule_time: str = None):
         # İlk görsel
         ai_image1_data = generate_ai_image(ai_image1_prompt)
         if ai_image1_data:
-            print("İlk AI görseli WordPress'e yükleniyor...")
+            logging.info("İlk AI görseli WordPress'e yükleniyor...")
             ai_media1_info = upload_image_to_wordpress(
                 title=f"{seo_baslik} - AI Görsel 1", 
                 image_data=ai_image1_data
@@ -596,7 +600,7 @@ def generate_and_post_logic(topic: str, schedule_time: str = None):
         # İkinci görsel
         ai_image2_data = generate_ai_image(ai_image2_prompt)
         if ai_image2_data:
-            print("İkinci AI görseli WordPress'e yükleniyor...")
+            logging.info("İkinci AI görseli WordPress'e yükleniyor...")
             ai_media2_info = upload_image_to_wordpress(
                 title=f"{seo_baslik} - AI Görsel 2", 
                 image_data=ai_image2_data
@@ -619,7 +623,7 @@ def generate_and_post_logic(topic: str, schedule_time: str = None):
         )
 
         # 6. Adım: WordPress'e gönder
-        print(f"'{seo_baslik}' başlıklı yazı WordPress'e gönderiliyor...")
+        logging.info(f"'{seo_baslik}' başlıklı yazı WordPress'e gönderiliyor...")
         post_details = post_to_wordpress(
             title=seo_baslik,
             content=final_content,
@@ -672,7 +676,7 @@ def generate_and_post_logic_with_context(topic: str, schedule_time_str: str = No
     Flask uygulama bağlamı (app context) içinde generate_and_post_logic'i çalıştırır.
     Zamanlayıcı tarafından çağrılmak için gereklidir.
     """
-    print(f"[LOG] generate_and_post_logic_with_context BAŞLADI - Konu: {topic}")
+    logging.info(f"[LOG] generate_and_post_logic_with_context BAŞLADI - Konu: {topic}")
     with app.app_context():
         final_schedule_time = None
         if schedule_time_str:
@@ -690,34 +694,34 @@ def generate_and_post_logic_with_context(topic: str, schedule_time_str: str = No
         try:
             # Mantık fonksiyonunu belirlenen zamanlama ile çağır
             generate_and_post_logic(topic, schedule_time=final_schedule_time)
-            print(f"BAŞARILI: '{topic}' konusu işlendi ve {final_schedule_time} tarihine zamanlandı.")
+            logging.info(f"BAŞARILI: '{topic}' konusu işlendi ve {final_schedule_time} tarihine zamanlandı.")
         except Exception as e:
-            print(f"*** HATA: '{topic}' konusu işlenirken arka planda bir hata oluştu: {e} ***")
-    print(f"[LOG] generate_and_post_logic_with_context BİTTİ - Konu: {topic}")
+            logging.error(f"*** HATA: '{topic}' konusu işlenirken arka planda bir hata oluştu: {e} ***")
+    logging.info(f"[LOG] generate_and_post_logic_with_context BİTTİ - Konu: {topic}")
 
 
 def post_nasa_apod_logic(schedule_time: str = None):
     """
     `post_nasa_apod` endpoint'inin ana mantığını içerir.
     """
-    print("[LOG] post_nasa_apod_logic BAŞLADI")
+    logging.info("[LOG] post_nasa_apod_logic BAŞLADI")
     try:
         # 1. Adım: NASA'dan veriyi al
-        print("NASA APOD verisi çekiliyor...")
+        logging.info("NASA APOD verisi çekiliyor...")
         apod_data = get_nasa_apod()
         if not apod_data or 'url' not in apod_data:
-            print("NASA'dan APOD verisi alınamadı.")
+            logging.error("NASA'dan APOD verisi alınamadı.")
             return jsonify({"error": "NASA'dan APOD verisi alınamadı."}), 502
 
         if apod_data.get("media_type") != "image":
-            print(f"Bugünün APOD içeriği bir görsel değil, bir {apod_data.get('media_type')}. İşlem atlandı.")
+            logging.warning(f"Bugünün APOD içeriği bir görsel değil, bir {apod_data.get('media_type')}. İşlem atlandı.")
             return jsonify({
                 "status": "skipped",
                 "message": f"Bugünün APOD içeriği bir görsel değil, bir {apod_data.get('media_type')}. İşlem atlandı."
             }), 200
             
         # 2. Adım: İçeriği Gemini ile zenginleştir
-        print("NASA içeriği Gemini'ye gönderiliyor...")
+        logging.info("NASA içeriği Gemini'ye gönderiliyor...")
         ingilizce_baslik = apod_data['title']
         ingilizce_aciklama = apod_data['explanation']
 
@@ -786,14 +790,14 @@ def post_nasa_apod_logic(schedule_time: str = None):
             kaynaklar = [line.strip() for line in parts[4].replace('[KAYNAKLAR]', '').strip().split('\n') if line.strip()]
 
         except (IndexError, ValueError):
-            print("Gemini'den gelen yanıt beklenilen formatta değil. Ayraçlar eksik olabilir.")
+            logging.error("Gemini'den gelen yanıt beklenilen formatta değil. Ayraçlar eksik olabilir.")
             return jsonify({"error": "Gemini'den gelen yanıt beklenilen formatta değil. Ayraçlar eksik olabilir."}), 500
 
         # 3. Adım: Görseli WordPress'e yükle
-        print(f"'{seo_baslik}' başlıklı görsel WordPress'e yükleniyor...")
+        logging.info(f"'{seo_baslik}' başlıklı görsel WordPress'e yükleniyor...")
         media_info = upload_image_to_wordpress(title=seo_baslik, image_url=apod_data['hdurl'])
         if not media_info:
-            print("NASA görseli WordPress'e yüklenemedi.")
+            logging.error("NASA görseli WordPress'e yüklenemedi.")
             return jsonify({"error": "NASA görseli WordPress'e yüklenemedi."}), 500
         
         media_id = media_info['id']
@@ -805,7 +809,7 @@ def post_nasa_apod_logic(schedule_time: str = None):
         ai_media_url = None
         ai_media_id = None
         if ai_image_data:
-            print("Üretilen AI görseli WordPress'e yükleniyor...")
+            logging.info("Üretilen AI görseli WordPress'e yükleniyor...")
             ai_media_info = upload_image_to_wordpress(
                 title=f"{seo_baslik} - Yapay Zeka Yorumu", 
                 image_data=ai_image_data
@@ -832,17 +836,17 @@ def post_nasa_apod_logic(schedule_time: str = None):
         # 6. Adım: Yazıyı WordPress'e gönder
         today_date = datetime.now().strftime("%d.%m.%Y")
         final_title = f"Günün Astronomi Fotoğrafı ({today_date}): {seo_baslik}"  # Günün astronomi fotoğrafı ve tarih ekle
-        print(f"'{final_title}' başlıklı yazı WordPress'e gönderiliyor...")
+        logging.info(f"'{final_title}' başlıklı yazı WordPress'e gönderiliyor...")
         post_details = post_to_wordpress(final_title, final_content, featured_media_id=media_id, meta_description=meta_aciklama, schedule_time=schedule_time)
-        print(f"BAŞARILI: NASA APOD içeriği gönderildi. Post ID: {post_details.get('id')}")
+        logging.info(f"BAŞARILI: NASA APOD içeriği gönderildi. Post ID: {post_details.get('id')}")
     
     except ValueError as e:
-        print(f"post_nasa_apod_logic sırasında bir hata oluştu: {e}")
+        logging.error(f"post_nasa_apod_logic sırasında bir hata oluştu: {e}")
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        print(f"İşlem sırasında beklenmedik bir hata oluştu: {e}")
+        logging.error(f"İşlem sırasında beklenmedik bir hata oluştu: {e}")
         return jsonify({"error": f"İşlem sırasında beklenmedik bir hata oluştu: {e}"}), 500
-    print("[LOG] post_nasa_apod_logic BİTTİ")
+    logging.info("[LOG] post_nasa_apod_logic BİTTİ")
 
 
 def get_wordpress_posts(limit=100):
@@ -854,7 +858,7 @@ def get_wordpress_posts(limit=100):
     wp_password = os.getenv("WORDPRESS_APP_PASSWORD")
     
     if not all([wp_url, wp_user, wp_password]):
-        print("WordPress kimlik bilgileri eksik")
+        logging.warning("WordPress kimlik bilgileri eksik")
         return []
     
     credentials = f"{wp_user}:{wp_password}"
@@ -878,11 +882,11 @@ def get_wordpress_posts(limit=100):
         
         posts = response.json()
         titles = [post['title']['rendered'] for post in posts]
-        print(f"WordPress'ten {len(titles)} yazı başlığı alındı")
+        logging.info(f"WordPress'ten {len(titles)} yazı başlığı alındı")
         return titles
         
     except Exception as e:
-        print(f"WordPress yazıları alınırken hata: {e}")
+        logging.error(f"WordPress yazıları alınırken hata: {e}")
         return []
 
 
@@ -935,7 +939,7 @@ def discover_trending_topics():
         all_results = []
         
         for term in search_terms:
-            print(f"'{term}' aranıyor...")
+            logging.info(f"'{term}' aranıyor...")
             results = search_google(term, time_filter="qdr:d")  # Son 24 saat filtresi
             if results:
                 all_results.extend(results[:3])  # Her terimden en fazla 3 sonuç
@@ -973,13 +977,13 @@ def discover_trending_topics():
                 if len(topic) > 10 and len(topic) < 100:
                     clean_topics.append(topic)
             
-            print(f"Keşfedilen konular: {clean_topics}")
+            logging.info(f"Keşfedilen konular: {clean_topics}")
             return clean_topics[:3]  # En fazla 3 konu döndür
         
         return []
         
     except Exception as e:
-        print(f"Konu keşfi sırasında hata: {e}")
+        logging.error(f"Konu keşfi sırasında hata: {e}")
         return []
 
 
@@ -1010,12 +1014,12 @@ def is_semantically_similar(new_topic: str, existing_titles: list) -> bool:
         
         # Yanıtı temizle ve kontrol et
         cleaned_response = response.strip().upper()
-        print(f"Anlamsal benzerlik kontrolü: Yeni konu='{new_topic}', Cevap='{cleaned_response}'")
+        logging.info(f"Anlamsal benzerlik kontrolü: Yeni konu='{new_topic}', Cevap='{cleaned_response}'")
         
         return "EVET" in cleaned_response
 
     except Exception as e:
-        print(f"Anlamsal benzerlik kontrolü sırasında hata: {e}")
+        logging.error(f"Anlamsal benzerlik kontrolü sırasında hata: {e}")
         # Hata durumunda, riske atmamak için benzer kabul et
         return True
 
@@ -1038,41 +1042,41 @@ def trigger_daily_content_generation_with_context():
     Flask uygulama bağlamı (app context) içinde trigger_daily_content_generation'ı çalıştırır.
     Zamanlayıcı tarafından çağrılmak için gereklidir.
     """
-    print("[LOG] trigger_daily_content_generation_with_context BAŞLADI")
+    logging.info("[LOG] trigger_daily_content_generation_with_context BAŞLADI")
     with app.app_context():
         trigger_daily_content_generation()
-    print("[LOG] trigger_daily_content_generation_with_context BİTTİ")
+    logging.info("[LOG] trigger_daily_content_generation_with_context BİTTİ")
 
 def trigger_daily_content_generation():
-    print("="*50)
-    print(f"OTOMATİK GÜNLÜK İÇERİK ÜRETİMİ BAŞLATILDI - {datetime.now()}")
-    print("="*50)
+    logging.info("="*50)
+    logging.info(f"OTOMATİK GÜNLÜK İÇERİK ÜRETİMİ BAŞLATILDI - {datetime.now()}")
+    logging.info("="*50)
 
     # Flask uygulama bağlamı (application context) içinde çalıştır
     with app.app_context():
         # 0. Adım: Akıllı zamanlamaları oluştur
         schedule_times = get_smart_schedule_times()
-        print(f"\nBugünün yayın planı oluşturuldu: {schedule_times}\n")
+        logging.info(f"\nBugünün yayın planı oluşturuldu: {schedule_times}\n")
 
         # 1. NASA APOD içeriği üret ve zamanla
-        print("\n=== 1/4: NASA APOD İçeriği Üretiliyor ve Zamanlanıyor ===\n")
+        logging.info("\n=== 1/4: NASA APOD İçeriği Üretiliyor ve Zamanlanıyor ===\n")
         try:
             # Yerel URL'ye istek göndermek yerine doğrudan fonksiyonu çağır
             post_nasa_apod_logic_with_context(schedule_time=schedule_times[0])
-            print(f"\n--- NASA APOD İçeriği Başarıyla Zamanlandı: {schedule_times[0]} ---\n")
+            logging.info(f"\n--- NASA APOD İçeriği Başarıyla Zamanlandı: {schedule_times[0]} ---\n")
         except Exception as e:
-            print(f"\n*** HATA: NASA APOD İçeriği Üretilemedi: {e} ***\n")
+            logging.error(f"\n*** HATA: NASA APOD İçeriği Üretilemedi: {e} ***\n")
 
         # 2. Mevcut yazıları kontrol et
-        print("\n=== 2/4: Mevcut Yazılar Kontrol Ediliyor ===\n")
+        logging.info("\n=== 2/4: Mevcut Yazılar Kontrol Ediliyor ===\n")
         existing_titles = get_wordpress_posts()
         
         # 3. Güncel konuları keşfet
-        print("\n=== 3/4: Güncel Konular Keşfediliyor ===\n")
+        logging.info("\n=== 3/4: Güncel Konular Keşfediliyor ===\n")
         trending_topics = discover_trending_topics()
         
         # 4. Benzersiz konulardan 3 içerik üret ve zamanla
-        print(f"\n=== 4/4: 3 Adet Benzersiz Konu İçin İçerik Üretimi Başlatılıyor ===\n")
+        logging.info(f"\n=== 4/4: 3 Adet Benzersiz Konu İçin İçerik Üretimi Başlatılıyor ===\n")
         
         published_google_posts = 0
         topic_index = 0
@@ -1081,10 +1085,10 @@ def trigger_daily_content_generation():
             topic = trending_topics[topic_index]
             topic_index += 1 # Bir sonraki deneme için indeksi artır
 
-            print(f"\n--- Aday Konu: '{topic}' ---")
+            logging.info(f"\n--- Aday Konu: '{topic}' ---")
             
             if is_semantically_similar(topic, existing_titles):
-                print(f"Anlamsal olarak benzer konu atlandı: {topic}")
+                logging.info(f"Anlamsal olarak benzer konu atlandı: {topic}")
                 continue # Bu konuyu atla ve döngünün başına dön
 
             try:
@@ -1092,19 +1096,19 @@ def trigger_daily_content_generation():
                 # Doğrudan fonksiyonu çağır ve zamanlama bilgisini gönder
                 generate_and_post_logic_with_context(topic, schedule_time_str=post_schedule_time)
                 
-                print(f"\n--- Konu '{topic}' Başarıyla Zamanlandı: {post_schedule_time} ---\n")
+                logging.info(f"\n--- Konu '{topic}' Başarıyla Zamanlandı: {post_schedule_time} ---\n")
                 published_google_posts += 1 # Başarılı yayın sayısını artır
                 existing_titles.append(topic) # Gelecek kontroller için listeye ekle
 
             except Exception as e:
-                print(f"\n*** HATA: Konu '{topic}' İşlenemedi: {e} ***\n")
+                logging.error(f"\n*** HATA: Konu '{topic}' İşlenemedi: {e} ***\n")
         
         if published_google_posts < 3:
-            print(f"\n!!! UYARI: Hedeflenen 3 Google içeriği yerine sadece {published_google_posts} adet üretilebildi. Konu havuzu yetersiz olabilir.")
+            logging.warning(f"\n!!! UYARI: Hedeflenen 3 Google içeriği yerine sadece {published_google_posts} adet üretilebildi. Konu havuzu yetersiz olabilir.")
 
-    print("="*50)
-    print(f"OTOMATİK GÜNLÜK İÇERİK ÜRETİMİ TAMAMLANDI - {datetime.now()}")
-    print("="*50)
+    logging.info("="*50)
+    logging.info(f"OTOMATİK GÜNLÜK İÇERİK ÜRETİMİ TAMAMLANDI - {datetime.now()}")
+    logging.info("="*50)
 
 
 if __name__ == '__main__':
