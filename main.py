@@ -5,7 +5,7 @@ import requests
 import base64
 from flask import request
 from googleapiclient.discovery import build
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import re
 from PIL import Image
 from io import BytesIO
@@ -240,6 +240,7 @@ def generate_ai_image(prompt: str):
         response.raise_for_status()
         
         response_data = response.json()
+        logging.info(f"Gemini Görsel API ham yanıtı: {response_data}") # Ham yanıtı logla
         
         # Gelen base64 verisini decode et
         if 'candidates' in response_data and len(response_data['candidates']) > 0:
@@ -503,11 +504,67 @@ def generate_and_post_logic(topic: str, schedule_time: str = None):
         logging.info(f"'{english_query}' sorgusu için son 24 saatte araştırma yapılıyor...")
         search_results = search_google(english_query, time_filter="qdr:d")
         
-        if not search_results:
-            logging.info(f"'{english_query}' için son 24 saatte sonuç bulunamadı. Konu atlanıyor.")
+        # Uygulama tarafında 24 saatlik filtreleme yap
+        filtered_results = []
+        now = datetime.now(timezone.utc) # UTC olarak güncel zaman
+        
+        for item in search_results:
+            publication_date_str = "Tarih Yok"
+            if 'pagemap' in item and 'metatags' in item['pagemap']:
+                metatags = item['pagemap']['metatags'][0]
+                if 'article:published_time' in metatags:
+                    publication_date_str = metatags['article:published_time']
+                elif 'datepublished' in metatags:
+                    publication_date_str = metatags['datepublished']
+                elif 'og:updated_time' in metatags:
+                    publication_date_str = metatags['og:updated_time']
+                elif 'last-modified' in metatags:
+                    publication_date_str = metatags['last-modified']
+            
+            try:
+                # Tarih stringini datetime objesine dönüştür
+                # Farklı formatları denemek için bir liste kullanabiliriz.
+                parsed_date = None
+                date_formats = [
+                    "%Y-%m-%dT%H:%M:%S%z", # 2024-05-03T09:47:55+00:00
+                    "%Y-%m-%dT%H:%M:%SZ", # 2025-04-25T21:27:06Z
+                    "%Y-%m-%dT%H:%M:%S-%H%M", # Diğer muhtemel formatlar
+                    "%Y-%m-%dT%H:%M:%S", # Zaman dilimi bilgisi olmayanlar
+                    "%Y-%m-%d %H:%M:%S",
+                    "%Y-%m-%d",
+                    "%b %d, %Y", # Jun 10, 2022 gibi formatlar
+                    "%d %b %Y", # 10 Jun 2022 gibi formatlar
+                ]
+                
+                for fmt in date_formats:
+                    try:
+                        # Zaman dilimi bilgisi olanlar için
+                        if '%' in fmt and ('%z' in fmt or '%Z' in fmt):
+                            parsed_date = datetime.strptime(publication_date_str, fmt)
+                        # Zaman dilimi bilgisi olmayanlar için
+                        else:
+                            parsed_date = datetime.strptime(publication_date_str, fmt).replace(tzinfo=timezone.utc)
+                        break
+                    except ValueError:
+                        continue
+                
+                if parsed_date:
+                    # Son 24 saati kontrol et
+                    if now - timedelta(hours=24) <= parsed_date <= now:
+                        filtered_results.append(item)
+                        logging.info(f"    -> Güncel (son 24 saat içinde): Başlık='{item.get('title')}', Tarih='{publication_date_str}'")
+                    else:
+                        logging.info(f"    -> Güncel Değil (eski): Başlık='{item.get('title')}', Tarih='{publication_date_str}'")
+                else:
+                    logging.info(f"    -> Tarih ayrıştırılamadı: Başlık='{item.get('title')}', Ham Tarih='{publication_date_str}'")
+            except Exception as e:
+                logging.error(f"Tarih ayrıştırma veya filtreleme sırasında hata: {e}. Başlık='{item.get('title')}', Ham Tarih='{publication_date_str}'")
+        
+        if not filtered_results:
+            logging.info(f"'{english_query}' için son 24 saatte güncel sonuç bulunamadı. Konu atlanıyor.")
             return # jsonify döndürme
 
-        simplified_results = [{"title": item.get('title'), "link": item.get('link')} for item in search_results]
+        simplified_results = [{"title": item.get('title'), "link": item.get('link')} for item in filtered_results]
         sources_text = "\n".join([f"- {result['title']}: {result['link']}" for result in simplified_results])
 
         # 3. Adım: İçerik Üretme
