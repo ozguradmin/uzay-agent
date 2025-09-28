@@ -464,7 +464,7 @@ def get_smart_schedule_times():
 
 def generate_and_post_logic(topic: str, schedule_time: str = None):
     """
-    `generate_and_post` endpoint'inin ana mantığını içerir.
+    `generate_and_post` endpoint'inin ana mantığını içerir. Artık jsonify DÖNDÜRMÜYOR.
     """
     if not topic:
         print("HATA: Konu belirtilmedi.")
@@ -672,8 +672,8 @@ def generate_and_post_logic_with_context(topic: str, schedule_time_str: str = No
     Flask uygulama bağlamı (app context) içinde generate_and_post_logic'i çalıştırır.
     Zamanlayıcı tarafından çağrılmak için gereklidir.
     """
+    print(f"[LOG] generate_and_post_logic_with_context BAŞLADI - Konu: {topic}")
     with app.app_context():
-        print(f"'{topic}' için arka plan görevi başlatıldı.")
         final_schedule_time = None
         if schedule_time_str:
             final_schedule_time = datetime.fromisoformat(schedule_time_str).isoformat()
@@ -688,16 +688,19 @@ def generate_and_post_logic_with_context(topic: str, schedule_time_str: str = No
                 final_schedule_time = (now + timedelta(days=1)).replace(hour=8, minute=45).isoformat()
         
         try:
+            # Mantık fonksiyonunu belirlenen zamanlama ile çağır
             generate_and_post_logic(topic, schedule_time=final_schedule_time)
             print(f"BAŞARILI: '{topic}' konusu işlendi ve {final_schedule_time} tarihine zamanlandı.")
         except Exception as e:
             print(f"*** HATA: '{topic}' konusu işlenirken arka planda bir hata oluştu: {e} ***")
+    print(f"[LOG] generate_and_post_logic_with_context BİTTİ - Konu: {topic}")
 
 
 def post_nasa_apod_logic(schedule_time: str = None):
     """
     `post_nasa_apod` endpoint'inin ana mantığını içerir.
     """
+    print("[LOG] post_nasa_apod_logic BAŞLADI")
     try:
         # 1. Adım: NASA'dan veriyi al
         print("NASA APOD verisi çekiliyor...")
@@ -839,6 +842,7 @@ def post_nasa_apod_logic(schedule_time: str = None):
     except Exception as e:
         print(f"İşlem sırasında beklenmedik bir hata oluştu: {e}")
         return jsonify({"error": f"İşlem sırasında beklenmedik bir hata oluştu: {e}"}), 500
+    print("[LOG] post_nasa_apod_logic BİTTİ")
 
 
 def get_wordpress_posts(limit=100):
@@ -1034,8 +1038,10 @@ def trigger_daily_content_generation_with_context():
     Flask uygulama bağlamı (app context) içinde trigger_daily_content_generation'ı çalıştırır.
     Zamanlayıcı tarafından çağrılmak için gereklidir.
     """
+    print("[LOG] trigger_daily_content_generation_with_context BAŞLADI")
     with app.app_context():
         trigger_daily_content_generation()
+    print("[LOG] trigger_daily_content_generation_with_context BİTTİ")
 
 def trigger_daily_content_generation():
     print("="*50)
