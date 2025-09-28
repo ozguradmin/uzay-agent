@@ -88,7 +88,7 @@ def test_wordpress_connection():
             "message": f"WordPress'e bağlanırken bir hata oluştu: {e}"
         }), 500
 
-def search_google(query: str, num_results: int = 20, time_filter: str = None):
+def search_google(query: str, num_results: int = 10, time_filter: str = None):
     """
     Google Custom Search API kullanarak bir arama sorgusu gerçekleştirir.
     time_filter: "qdr:d" (son 24 saat), "qdr:w" (son hafta), "qdr:m" (son ay)
@@ -868,6 +868,7 @@ def post_nasa_apod_logic(schedule_time: str = None):
         logging.info(f"'{final_title}' başlıklı yazı WordPress'e gönderiliyor...")
         post_details = post_to_wordpress(final_title, final_content, featured_media_id=media_id, meta_description=meta_aciklama, schedule_time=schedule_time)
         logging.info(f"BAŞARILI: NASA APOD içeriği gönderildi. Post ID: {post_details.get('id')}")
+        return True # Başarılı olduğunu belirtmek için True döndür
     
     except ValueError as e:
         logging.error(f"post_nasa_apod_logic sırasında bir hata oluştu: {e}")
@@ -947,14 +948,14 @@ def discover_trending_topics():
         
         for term in search_terms:
             logging.info(f"'{term}' aranıyor...")
-            results = search_google(term, num_results=20, time_filter="qdr:d")  # Her terimden daha fazla sonuç al
+            results = search_google(term, num_results=10, time_filter="qdr:d")  # Her terimden daha fazla sonuç al
             if results:
                 all_results.extend(results)  # Tüm sonuçları ekle, sonra Gemini filtreleyecek
         
         # Sonuçları Gemini'ye gönder ve ilgi çekici konuları filtrele
         if all_results:
-            # Sadece ilk 20 sonucu Gemini'ye gönder, çok uzun olmaması için
-            logging.info(f"Gemini'ye gönderilen ham arama sonuçları: {chr(10).join([f'  - {item.get('title', '')} ({item.get('link', '')})' for item in all_results[:20]])}")
+            # Sadece ilk 10 sonucu Gemini'ye gönder, çok uzun olmaması için
+            logging.info(f"Gemini'ye gönderilen ham arama sonuçları: {chr(10).join([f'  - {item.get('title', '')} ({item.get('link', '')})' for item in all_results[:10]])}")
             topics_prompt = f"""
             Sen bir uzay ve astronomi içerik editörüsün. Aşağıdaki güncel haberleri analiz et ve galaktikuzay.com için en ilgi çekici 3 konuyu seç.
             
