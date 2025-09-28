@@ -42,13 +42,32 @@
             <!-- Manuel İçerik Üretme -->
             <div class="card rounded-lg p-6">
                 <h2 class="text-2xl font-semibold text-white mb-4"><i class="fas fa-pencil-alt mr-2"></i>Manuel İçerik Üret</h2>
-                <p class="mb-4">Belirli bir konuda anında içerik üretmek için burayı kullanın.</p>
+                <p class="mb-4">Belirli bir konuda, istediğiniz zaman yayınlanmak üzere içerik üretin.</p>
                 <form id="manual-topic-form">
-                    <input type="text" id="topic-input" placeholder="Konu girin (örn: 'Kara delikler')" class="w-full p-2 rounded bg-gray-800 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4">
+                    <div class="mb-4">
+                        <label for="topic-input" class="block text-sm font-medium text-gray-300 mb-1">Konu</label>
+                        <input type="text" id="topic-input" placeholder="örn: 'James Webb yeni keşfi'" class="w-full p-2 rounded bg-gray-800 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div class="mb-4">
+                        <label for="schedule-datetime" class="block text-sm font-medium text-gray-300 mb-1">Yayınlanma Zamanı (Opsiyonel)</label>
+                        <input type="datetime-local" id="schedule-datetime" class="w-full p-2 rounded bg-gray-800 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500" style="color-scheme: dark;">
+                        <p class="text-xs text-gray-500 mt-1">Boş bırakırsanız, en yakın uygun zaman dilimine otomatik olarak zamanlanır.</p>
+                    </div>
                     <button type="submit" class="w-full btn text-white font-bold py-2 px-4 rounded">
-                        <i class="fas fa-cogs mr-2"></i>İçeriği Üret
+                        <i class="fas fa-cogs mr-2"></i>İçeriği Üret ve Zamanla
                     </button>
                 </form>
+            </div>
+
+            <!-- Otomatik Üretimi Tetikleme -->
+            <div class="card rounded-lg p-6 flex flex-col justify-between">
+                <div>
+                    <h2 class="text-2xl font-semibold text-white mb-4"><i class="fas fa-play-circle mr-2"></i>Otomatik Üretimi Başlat</h2>
+                    <p class="mb-4">Her sabah 08:45'te çalışan otomatik içerik üretimini manuel olarak hemen başlatın.</p>
+                </div>
+                <button id="trigger-auto-generation" class="w-full btn text-white font-bold py-2 px-4 rounded mt-4">
+                    <i class="fas fa-fast-forward mr-2"></i>Şimdi Tetikle
+                </button>
             </div>
 
             <!-- Zamanlanmış Gönderiler -->
@@ -81,6 +100,8 @@
         document.getElementById('manual-topic-form').addEventListener('submit', async function(event) {
             event.preventDefault();
             const topic = document.getElementById('topic-input').value;
+            const scheduleTime = document.getElementById('schedule-datetime').value;
+
             if (!topic) {
                 alert('Lütfen bir konu girin.');
                 return;
@@ -93,16 +114,36 @@
                 const response = await fetch('/generate-and-post', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ topic: topic })
+                    body: JSON.stringify({ 
+                        topic: topic,
+                        schedule_time: scheduleTime || null // Eğer boşsa null gönder
+                    })
                 });
                 const result = await response.json();
                 
                 if (response.ok) {
-                    responseArea.innerHTML = `<div class="card p-4 text-green-400"><p><strong>Başarılı!</strong> "${topic}" konusu başarıyla işlendi ve WordPress'e zamanlandı.</p></div>`;
+                    responseArea.innerHTML = `<div class="card p-4 text-green-400"><p><strong>Başarılı!</strong> "${topic}" konusu başarıyla işlendi ve WordPress'e gönderildi.</p></div>`;
                 } else {
                     throw new Error(result.error || 'Bir hata oluştu.');
                 }
 
+            } catch (error) {
+                responseArea.innerHTML = `<div class="card p-4 text-red-400"><p><strong>Hata:</strong> ${error.message}</p></div>`;
+            }
+        });
+
+        document.getElementById('trigger-auto-generation').addEventListener('click', async function() {
+            const responseArea = document.getElementById('response-area');
+            responseArea.innerHTML = '<p class="text-center text-blue-400">Otomatik üretim süreci başlatılıyor...</p>';
+
+            try {
+                const response = await fetch('/generate-daily-content', { method: 'POST' });
+                const result = await response.json();
+                if (response.ok) {
+                    responseArea.innerHTML = `<div class="card p-4 text-green-400"><p><strong>Başlatıldı!</strong> Otomatik üretim süreci arka planda çalışmaya başladı. Sonuçları terminal loglarından veya bir süre sonra "Zamanlanmış Gönderiler" listesinden takip edebilirsiniz.</p></div>`;
+                } else {
+                    throw new Error(result.error || 'Bir hata oluştu.');
+                }
             } catch (error) {
                 responseArea.innerHTML = `<div class="card p-4 text-red-400"><p><strong>Hata:</strong> ${error.message}</p></div>`;
             }

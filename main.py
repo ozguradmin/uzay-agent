@@ -642,15 +642,39 @@ def generate_and_post_logic(topic: str, schedule_time: str = None):
 def generate_and_post_endpoint():
     """
     Bir konu alır, araştırır, içerik üretir ve WordPress'e gönderir.
+    Panelden gelen manuel istekleri işler.
     """
     data = request.json
     topic = data.get('topic')
+    schedule_time_str = data.get('schedule_time') # Panelden gelen zaman (örn: 2025-09-29T14:30)
+
     if not topic:
         return jsonify({"error": "Lütfen bir içerik konusu belirtin."}), 400
     
+    final_schedule_time = None
+    if schedule_time_str:
+        # Gelen string'i datetime objesine çevir ve ISO formata getir
+        final_schedule_time = datetime.fromisoformat(schedule_time_str).isoformat()
+    else:
+        # Eğer zaman belirtilmemişse, en yakın uygun zamanı bul ve ata
+        now = datetime.now()
+        smart_times = get_smart_schedule_times()
+        for t in smart_times:
+            # Gelecekteki ilk uygun zamanı bul
+            if datetime.fromisoformat(t) > now:
+                final_schedule_time = t
+                break
+        # Eğer hepsi geçmişte kaldıysa, ertesi günün ilk saatini ata
+        if not final_schedule_time:
+            final_schedule_time = (now + timedelta(days=1)).replace(hour=8, minute=45).isoformat()
+
     try:
-        generate_and_post_logic(topic)
-        return jsonify({"status": "success", "message": f"'{topic}' konusu başarıyla işlendi."})
+        # Mantık fonksiyonunu belirlenen zamanlama ile çağır
+        generate_and_post_logic(topic, schedule_time=final_schedule_time)
+        return jsonify({
+            "status": "success", 
+            "message": f"'{topic}' konusu başarıyla işlendi ve {final_schedule_time} tarihine zamanlandı."
+        })
     except Exception as e:
         return jsonify({"error": f"İçerik üretimi sırasında hata: {e}"}), 500
 
