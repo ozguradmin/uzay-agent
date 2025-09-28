@@ -1,0 +1,41 @@
+services:
+  # 1. Web Servisi: Flask uygulamasını ve Admin Panelini çalıştırır.
+  - type: web
+    name: uzay-agent-web
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn 'main:app'"
+    envVars:
+      - key: SERVICE_TYPE
+        value: web
+      - fromGroup: uzay-agent-secrets
+
+  # 2. Arka Plan Çalışanı: Zamanlayıcıyı (APScheduler) 7/24 çalıştırır.
+  - type: worker
+    name: uzay-agent-scheduler
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python main.py"
+    envVars:
+      - key: SERVICE_TYPE
+        value: worker
+      - fromGroup: uzay-agent-secrets
+
+# Ortam Değişkenleri Grubu: Tüm API anahtarları ve şifreler burada saklanır.
+envVarGroups:
+  - name: uzay-agent-secrets
+    envVars:
+      - key: WORDPRESS_URL
+        value: "" # Burayı Render'da dolduracaksınız
+      - key: WORDPRESS_USER
+        value: "" # Burayı Render'da dolduracaksınız
+      - key: WORDPRESS_APP_PASSWORD
+        value: "" # Burayı Render'da dolduracaksınız
+      - key: GEMINI_API_KEY
+        value: "" # Burayı Render'da dolduracaksınız
+      - key: NASA_API_KEY
+        value: "" # Burayı Render'da dolduracaksınız
+      - key: GOOGLE_API_KEY
+        value: "" # Burayı Render'da dolduracaksınız
+      - key: GOOGLE_SEARCH_ENGINE_ID
+        value: "" # Burayı Render'da dolduracaksınız

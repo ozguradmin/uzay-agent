@@ -1,0 +1,10 @@
+# Sanal Ortam
+venv/
+__pycache__/
+
+# Hassas Bilgiler
+*.json
+.env
+
+# Log Dosyaları
+*.log

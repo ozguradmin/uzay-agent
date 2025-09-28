@@ -1,0 +1,10 @@
+flask
+python-dotenv
+google-api-python-client
+requests
+pillow
+google-auth
+google-auth-oauthlib
+requests-oauthlib
+apscheduler
+gunicorn
