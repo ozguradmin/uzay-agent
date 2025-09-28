@@ -673,32 +673,26 @@ def generate_and_post_logic_with_context(topic: str, schedule_time_str: str = No
     Zamanlayıcı tarafından çağrılmak için gereklidir.
     """
     with app.app_context():
+        print(f"'{topic}' için arka plan görevi başlatıldı.")
         final_schedule_time = None
         if schedule_time_str:
-            # Gelen string'i datetime objesine çevir ve ISO formata getir
             final_schedule_time = datetime.fromisoformat(schedule_time_str).isoformat()
         else:
-            # Eğer zaman belirtilmemişse, en yakın uygun zamanı bul ve ata
             now = datetime.now()
             smart_times = get_smart_schedule_times()
             for t in smart_times:
-                # Gelecekteki ilk uygun zamanı bul
                 if datetime.fromisoformat(t) > now:
                     final_schedule_time = t
                     break
-            # Eğer hepsi geçmişte kaldıysa, ertesi günün ilk saatini ata
             if not final_schedule_time:
                 final_schedule_time = (now + timedelta(days=1)).replace(hour=8, minute=45).isoformat()
-
+        
         try:
-            # Mantık fonksiyonunu belirlenen zamanlama ile çağır
             generate_and_post_logic(topic, schedule_time=final_schedule_time)
-            return jsonify({
-                "status": "success", 
-                "message": f"'{topic}' konusu başarıyla işlendi ve {final_schedule_time} tarihine zamanlandı."
-            })
+            print(f"BAŞARILI: '{topic}' konusu işlendi ve {final_schedule_time} tarihine zamanlandı.")
         except Exception as e:
-            return jsonify({"error": f"İçerik üretimi sırasında hata: {e}"}), 500
+            print(f"*** HATA: '{topic}' konusu işlenirken arka planda bir hata oluştu: {e} ***")
+
 
 def post_nasa_apod_logic(schedule_time: str = None):
     """
@@ -709,9 +703,11 @@ def post_nasa_apod_logic(schedule_time: str = None):
         print("NASA APOD verisi çekiliyor...")
         apod_data = get_nasa_apod()
         if not apod_data or 'url' not in apod_data:
+            print("NASA'dan APOD verisi alınamadı.")
             return jsonify({"error": "NASA'dan APOD verisi alınamadı."}), 502
 
         if apod_data.get("media_type") != "image":
+            print(f"Bugünün APOD içeriği bir görsel değil, bir {apod_data.get('media_type')}. İşlem atlandı.")
             return jsonify({
                 "status": "skipped",
                 "message": f"Bugünün APOD içeriği bir görsel değil, bir {apod_data.get('media_type')}. İşlem atlandı."
@@ -787,12 +783,14 @@ def post_nasa_apod_logic(schedule_time: str = None):
             kaynaklar = [line.strip() for line in parts[4].replace('[KAYNAKLAR]', '').strip().split('\n') if line.strip()]
 
         except (IndexError, ValueError):
+            print("Gemini'den gelen yanıt beklenilen formatta değil. Ayraçlar eksik olabilir.")
             return jsonify({"error": "Gemini'den gelen yanıt beklenilen formatta değil. Ayraçlar eksik olabilir."}), 500
 
         # 3. Adım: Görseli WordPress'e yükle
         print(f"'{seo_baslik}' başlıklı görsel WordPress'e yükleniyor...")
         media_info = upload_image_to_wordpress(title=seo_baslik, image_url=apod_data['hdurl'])
         if not media_info:
+            print("NASA görseli WordPress'e yüklenemedi.")
             return jsonify({"error": "NASA görseli WordPress'e yüklenemedi."}), 500
         
         media_id = media_info['id']
@@ -833,16 +831,13 @@ def post_nasa_apod_logic(schedule_time: str = None):
         final_title = f"Günün Astronomi Fotoğrafı ({today_date}): {seo_baslik}"  # Günün astronomi fotoğrafı ve tarih ekle
         print(f"'{final_title}' başlıklı yazı WordPress'e gönderiliyor...")
         post_details = post_to_wordpress(final_title, final_content, featured_media_id=media_id, meta_description=meta_aciklama, schedule_time=schedule_time)
-        
-        return jsonify({
-            "status": "success",
-            "message": "NASA Günün Fotoğrafı başarıyla WordPress'e taslak olarak gönderildi!",
-            "post_url": post_details.get('_links', {}).get('self', [{}])[0].get('href')
-        })
-
+        print(f"BAŞARILI: NASA APOD içeriği gönderildi. Post ID: {post_details.get('id')}")
+    
     except ValueError as e:
+        print(f"post_nasa_apod_logic sırasında bir hata oluştu: {e}")
         return jsonify({"error": str(e)}), 400
     except Exception as e:
+        print(f"İşlem sırasında beklenmedik bir hata oluştu: {e}")
         return jsonify({"error": f"İşlem sırasında beklenmedik bir hata oluştu: {e}"}), 500
 
 
