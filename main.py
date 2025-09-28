@@ -124,7 +124,7 @@ def search_google(query: str, num_results: int = 10):
 
     # Gemini'ye sonuçları nasıl formatlaması gerektiğini söyleyen sistem talimatı
     system_prompt = """
-    Sen bir arama sonucu formatlama aracısın. Görevin, kullanıcının sorgusu için bir Google araması yapmak ve sonuçları KESİNLİKLE son 24 saat (one day) ile sınırlamaktır. En alakalı 7-10 sonucu döndür.
+    Sen bir arama sonucu formatlama aracısın. EN BİRİNCİL GÖREVİN, kullanıcının sorgusu için bir Google araması yapmak ve sonuçları KESİNLİKLE son 24 saat (past day) ile sınırlamaktır. Diğer tüm kriterlerden önce bu zaman filtresi gelmelidir. En alakalı 5-7 sonucu döndür.
     Yanıtını TEK BİR JSON nesnesi olarak formatlamalısın. Bu nesne "items" adında tek bir anahtar içermelidir.
     "items" anahtarının değeri, her biri "title", "link" ve "snippet" anahtarlarına sahip nesnelerden oluşan bir dizi olmalıdır.
     Alakalı sonuç bulamazsan, {"items": []} gibi boş bir "items" dizisi içeren bir nesne döndür.
@@ -561,7 +561,7 @@ def generate_and_post_logic(topic: str, schedule_time: str = None):
         
         if not search_results:
             logging.info(f"'{english_query}' için son 24-48 saatte güncel sonuç bulunamadı. Konu atlanıyor.")
-            return # jsonify döndürme
+            return False # Başarısız olduğunu belirtmek için False döndür
 
         simplified_results = [{"title": item.get('title'), "link": item.get('link')} for item in search_results]
         sources_text = "\n".join([f"- {result['title']}: {result['link']}" for result in simplified_results])
@@ -977,12 +977,18 @@ def discover_trending_topics():
         ]
         
         all_results = []
-        
-        # Arama terimlerini tek bir büyük sorguda birleştirelim
-        # Bu, Gemini'ye daha geniş bir bağlam sunar ve daha iyi konular seçmesine yardımcı olabilir
-        combined_query = " OR ".join(f'"{term}"' for term in search_terms)
-        logging.info(f"Birleştirilmiş sorgu ile en son uzay haberleri aranıyor...")
-        all_results = search_google(combined_query, num_results=10)
+        unique_links = set()
+
+        for term in search_terms:
+            logging.info(f"'{term}' için arama yapılıyor...")
+            results = search_google(term, num_results=5) # Her terimden daha az ama odaklı sonuç al
+            if results:
+                for item in results:
+                    # URL bazında tekilleştirme
+                    link = item.get('link')
+                    if link and link not in unique_links:
+                        all_results.append(item)
+                        unique_links.add(link)
         
         # Sonuçları Gemini'ye gönder ve ilgi çekici konuları filtrele
         if all_results:
