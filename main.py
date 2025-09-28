@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request, render_template
 from dotenv import load_dotenv
 import os
 import requests
@@ -24,8 +24,9 @@ load_dotenv()
 app = Flask(__name__)
 
 @app.route('/')
-def index():
-    return "UzayAgent API Çalışıyor!"
+def admin_panel():
+    """Admin panelinin ana sayfasını gösterir."""
+    return render_template('index.html')
 
 @app.route('/api/status', methods=['GET'])
 def api_status():
