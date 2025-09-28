@@ -17,6 +17,7 @@ import threading
 import time
 import logging
 import random
+import dateutil.parser
 
 # .env dosyasındaki ortam değişkenlerini yükle
 load_dotenv()
@@ -237,10 +238,16 @@ def generate_ai_image(prompt: str):
         }
 
         response = requests.post(url, headers=headers, json=data, timeout=120)
-        response.raise_for_status()
-        
+        try:
+            response.raise_for_status()
+        except requests.exceptions.RequestException as http_err:
+            logging.error(f"!!! HATA: Gemini Görsel API HTTP hatası: {http_err}")
+            logging.error(f"Yanıt Durum Kodu: {response.status_code}")
+            logging.error(f"Yanıt Metni: {response.text}")
+            return None
+
         response_data = response.json()
-        logging.info(f"Gemini Görsel API ham yanıtı: {response_data}") # Ham yanıtı logla
+        # logging.info(f"Gemini Görsel API ham yanıtı: {response_data}") # Ham yanıtı sadece hata durumunda loglayacağız
         
         # Gelen base64 verisini decode et
         if 'candidates' in response_data and len(response_data['candidates']) > 0:
@@ -252,11 +259,11 @@ def generate_ai_image(prompt: str):
                         logging.info("AI görseli başarıyla üretildi.")
                         return image_bytes
         
-        logging.error("!!! HATA: AI görseli üretilemedi - yanıt formatı beklenmeyen")
+        logging.error(f"!!! HATA: AI görseli üretilemedi - yanıt formatı beklenmeyen veya görsel verisi yok. Ham yanıt: {response_data}")
         return None
 
     except Exception as e:
-        logging.error(f"!!! HATA: AI görseli üretilemedi: {e}")
+        logging.error(f"!!! HATA: AI görseli üretimi sırasında genel hata: {e}")
         return None
 
 def markdown_to_html_links(text):
@@ -522,31 +529,18 @@ def generate_and_post_logic(topic: str, schedule_time: str = None):
                     publication_date_str = metatags['last-modified']
             
             try:
-                # Tarih stringini datetime objesine dönüştür
-                # Farklı formatları denemek için bir liste kullanabiliriz.
                 parsed_date = None
-                date_formats = [
-                    "%Y-%m-%dT%H:%M:%S%z", # 2024-05-03T09:47:55+00:00
-                    "%Y-%m-%dT%H:%M:%SZ", # 2025-04-25T21:27:06Z
-                    "%Y-%m-%dT%H:%M:%S-%H%M", # Diğer muhtemel formatlar
-                    "%Y-%m-%dT%H:%M:%S", # Zaman dilimi bilgisi olmayanlar
-                    "%Y-%m-%d %H:%M:%S",
-                    "%Y-%m-%d",
-                    "%b %d, %Y", # Jun 10, 2022 gibi formatlar
-                    "%d %b %Y", # 10 Jun 2022 gibi formatlar
-                ]
-                
-                for fmt in date_formats:
+                if publication_date_str != "Tarih Yok":
                     try:
-                        # Zaman dilimi bilgisi olanlar için
-                        if '%' in fmt and ('%z' in fmt or '%Z' in fmt):
-                            parsed_date = datetime.strptime(publication_date_str, fmt)
-                        # Zaman dilimi bilgisi olmayanlar için
+                        parsed_date = dateutil.parser.parse(publication_date_str)
+                        # Tarihi UTC'ye dönüştür
+                        if parsed_date.tzinfo is None:
+                            parsed_date = parsed_date.replace(tzinfo=timezone.utc)
                         else:
-                            parsed_date = datetime.strptime(publication_date_str, fmt).replace(tzinfo=timezone.utc)
-                        break
+                            parsed_date = parsed_date.astimezone(timezone.utc)
                     except ValueError:
-                        continue
+                        logging.info(f"    -> Tarih ayrıştırılamadı (dateutil.parser): Başlık='{item.get('title')}', Ham Tarih='{publication_date_str}'")
+                        parsed_date = None # Ayrıştırma başarısız olursa None olarak ayarla
                 
                 if parsed_date:
                     # Son 24 saati kontrol et
@@ -556,7 +550,7 @@ def generate_and_post_logic(topic: str, schedule_time: str = None):
                     else:
                         logging.info(f"    -> Güncel Değil (eski): Başlık='{item.get('title')}', Tarih='{publication_date_str}'")
                 else:
-                    logging.info(f"    -> Tarih ayrıştırılamadı: Başlık='{item.get('title')}', Ham Tarih='{publication_date_str}'")
+                    logging.info(f"    -> Tarih ayrıştırılamadı veya güncel değil: Başlık='{item.get('title')}', Ham Tarih='{publication_date_str}'")
             except Exception as e:
                 logging.error(f"Tarih ayrıştırma veya filtreleme sırasında hata: {e}. Başlık='{item.get('title')}', Ham Tarih='{publication_date_str}'")
         
@@ -932,55 +926,29 @@ def discover_trending_topics():
     try:
         # Güncel uzay konuları için arama terimleri - İngilizce + çeşitli ve viral
         search_terms = [
-            "space news 2025",
-            "astronomy discoveries",
-            "meteor shower 2025",
-            "space missions",
-            "planet discoveries",
-            "space technology",
-            "astronaut news",
-            "black hole discoveries",
-            "star formation",
-            "galaxy discoveries",
-            "space station",
-            "rocket technology",
-            "space tourism",
-            "Mars missions",
-            "Jupiter discoveries",
-            "Saturn rings",
-            "space telescopes",
-            "exoplanet discoveries",
-            "NASA latest news",
-            "ESA space missions",
-            "space exploration",
-            "cosmic phenomena",
-            "solar system news",
-            "space science breakthroughs",
-            # Tek kelimelik aramalar
-            "space",
-            "NASA",
-            "astronomy",
-            "cosmos",
-            "universe",
-            "galaxy",
-            "planet",
-            "asteroid",
-            "comet",
-            "moon",
-            "sun",
-            "star"
+            "latest space news 24 hours",
+            "recent astronomy discoveries today",
+            "new exoplanet findings",
+            "NASA mission updates",
+            "ESA space news",
+            "cutting-edge space technology",
+            "black hole latest research",
+            "galaxy evolution recent studies",
+            "cosmic phenomena current events",
+            "solar system recent observations"
         ]
         
         all_results = []
         
         for term in search_terms:
             logging.info(f"'{term}' aranıyor...")
-            results = search_google(term, time_filter="qdr:d")  # Son 24 saat filtresi
+            results = search_google(term, num_results=10, time_filter="qdr:d")  # Her terimden daha fazla sonuç al
             if results:
-                all_results.extend(results[:3])  # Her terimden en fazla 3 sonuç
+                all_results.extend(results)  # Tüm sonuçları ekle, sonra Gemini filtreleyecek
         
         # Sonuçları Gemini'ye gönder ve ilgi çekici konuları filtrele
         if all_results:
+            # Sadece ilk 10 sonucu Gemini'ye gönder, çok uzun olmaması için
             logging.info(f"Gemini'ye gönderilen ham arama sonuçları: {chr(10).join([f'  - {item.get('title', '')} ({item.get('link', '')})' for item in all_results[:10]])}")
             topics_prompt = f"""
             Sen bir uzay ve astronomi içerik editörüsün. Aşağıdaki güncel haberleri analiz et ve galaktikuzay.com için en ilgi çekici 3 konuyu seç.
