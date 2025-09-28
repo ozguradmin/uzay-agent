@@ -120,7 +120,20 @@ def search_google(query: str, num_results: int = 5, time_filter: str = None):
         found_items = result.get('items', [])
         if found_items:
             for i, item in enumerate(found_items):
-                logging.info(f"  Google Arama Sonucu {i+1}: Başlık='{item.get('title')}', Link='{item.get('link')}'")
+                # Yayın tarihini pagemap'ten çıkarmaya çalış
+                publication_date = "Tarih Yok"
+                if 'pagemap' in item and 'metatags' in item['pagemap']:
+                    metatags = item['pagemap']['metatags'][0]
+                    if 'article:published_time' in metatags:
+                        publication_date = metatags['article:published_time']
+                    elif 'datepublished' in metatags:
+                        publication_date = metatags['datepublished']
+                    elif 'og:updated_time' in metatags:
+                        publication_date = metatags['og:updated_time']
+                    elif 'last-modified' in metatags:
+                        publication_date = metatags['last-modified']
+
+                logging.info(f"  Google Arama Sonucu {i+1}: Başlık='{item.get('title')}', Link='{item.get('link')}', Tarih='{publication_date}'")
         else:
             logging.info("  Google aramasında sonuç bulunamadı.")
         
