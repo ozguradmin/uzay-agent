@@ -1082,6 +1082,17 @@ def test_background_endpoint():
     trigger_thread.start()
     return jsonify({"status": "success", "message": "Basit test görevi arka plana eklendi. 5 saniye içinde logları kontrol edin."})
 
+@app.route('/generate-daily-content', methods=['POST'])
+def generate_daily_content_endpoint():
+    """
+    Admin panelinden veya harici bir istek ile günlük içerik üretimini tetikler.
+    İstek hemen yanıtlanır, asıl işlem arka planda bir thread'de çalışır.
+    """
+    logging.info("Manuel günlük içerik üretim isteği alındı. Arka planda başlatılıyor...")
+    trigger_thread = threading.Thread(target=trigger_daily_content_generation)
+    trigger_thread.start()
+    return jsonify({"status": "success", "message": "Günlük içerik üretimi arka planda başlatıldı! Logları kontrol edin."}), 200
+
 def scheduler_loop():
     """
     Her 60 saniyede bir saati kontrol eden ve doğru zamanda ana görevi tetikleyen
