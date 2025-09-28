@@ -124,7 +124,7 @@ def search_google(query: str, num_results: int = 10):
 
     # Gemini'ye sonuçları nasıl formatlaması gerektiğini söyleyen sistem talimatı
     system_prompt = """
-    Sen bir arama sonucu formatlama aracısın. Görevin, kullanıcının sorgusu için bir Google araması yapmak ve son 24-48 saatteki sonuçlara odaklanmaktır. En alakalı 7-10 sonucu döndür.
+    Sen bir arama sonucu formatlama aracısın. Görevin, kullanıcının sorgusu için bir Google araması yapmak ve sonuçları KESİNLİKLE son 24 saat (one day) ile sınırlamaktır. En alakalı 7-10 sonucu döndür.
     Yanıtını TEK BİR JSON nesnesi olarak formatlamalısın. Bu nesne "items" adında tek bir anahtar içermelidir.
     "items" anahtarının değeri, her biri "title", "link" ve "snippet" anahtarlarına sahip nesnelerden oluşan bir dizi olmalıdır.
     Alakalı sonuç bulamazsan, {"items": []} gibi boş bir "items" dizisi içeren bir nesne döndür.
@@ -651,6 +651,7 @@ def generate_and_post_logic(topic: str, schedule_time: str = None):
         ai_media1_id = None
         ai_media2_url = None
         ai_media2_id = None
+        featured_media_id_to_use = None # Öne çıkarılacak görseli belirlemek için
         
         # İlk görsel
         ai_image1_data = generate_ai_image(ai_image1_prompt)
@@ -663,6 +664,7 @@ def generate_and_post_logic(topic: str, schedule_time: str = None):
             if ai_media1_info and ai_media1_info.get('url'):
                 ai_media1_url = ai_media1_info.get('url')
                 ai_media1_id = ai_media1_info.get('id')
+                featured_media_id_to_use = ai_media1_id # İlk görseli öne çıkan yap
         
         # İkinci görsel
         ai_image2_data = generate_ai_image(ai_image2_prompt)
@@ -675,6 +677,12 @@ def generate_and_post_logic(topic: str, schedule_time: str = None):
             if ai_media2_info and ai_media2_info.get('url'):
                 ai_media2_url = ai_media2_info.get('url')
                 ai_media2_id = ai_media2_info.get('id')
+                # Eğer ilk görsel başarısız olduysa, ikinciyi öne çıkan yap
+                if not featured_media_id_to_use:
+                    featured_media_id_to_use = ai_media2_id
+        
+        if not featured_media_id_to_use:
+            logging.warning(f"'{seo_baslik}' konusu için her iki AI görseli de üretilemedi. Yazı görsel olmadan yayınlanacak.")
 
         # 5. Adım: Tamamen formatlanmış içeriği oluştur
         final_content = build_wordpress_content(
@@ -694,6 +702,7 @@ def generate_and_post_logic(topic: str, schedule_time: str = None):
         post_details = post_to_wordpress(
             title=seo_baslik,
             content=final_content,
+            featured_media_id=featured_media_id_to_use,
             meta_description=meta_aciklama,
             schedule_time=schedule_time
         )
@@ -730,8 +739,11 @@ def generate_and_post_logic_with_context(topic: str, schedule_time_str: str = No
         
         try:
             # Mantık fonksiyonunu belirlenen zamanlama ile çağır
-            generate_and_post_logic(topic, schedule_time=final_schedule_time)
-            logging.info(f"BAŞARILI: '{topic}' konusu işlendi ve {final_schedule_time} tarihine zamanlandı.")
+            result = generate_and_post_logic(topic, schedule_time=final_schedule_time)
+            if result:
+                logging.info(f"BAŞARILI: '{topic}' konusu işlendi ve {final_schedule_time} tarihine zamanlandı.")
+            else:
+                logging.warning(f"UYARI: '{topic}' konusu işlenemedi veya atlandı (örneğin, güncel kaynak bulunamadı).")
         except Exception as e:
             logging.error(f"*** HATA: '{topic}' konusu işlenirken arka planda bir hata oluştu: {e} ***")
     logging.info(f"[LOG] generate_and_post_logic_with_context BİTTİ - Konu: {topic}")
@@ -1161,7 +1173,7 @@ def test_background_endpoint():
     # scheduler.add_job(simple_background_task, 'date', run_date=datetime.now() + timedelta(seconds=2)) # Removed as per new_code
     trigger_thread = threading.Thread(target=simple_background_task)
     trigger_thread.start()
-    return jsonify({"status": "success", "message": "Basit test görevi arka plana eklendi. 5 saniye içinde logları kontrol edin."})
+    return jsonify({"status": "success", "message": "Basit test görevi arka planda eklendi. 5 saniye içinde logları kontrol edin."})
 
 @app.route('/generate-daily-content', methods=['POST'])
 def generate_daily_content_endpoint():
