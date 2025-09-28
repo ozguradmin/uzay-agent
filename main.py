@@ -1111,6 +1111,29 @@ def trigger_daily_content_generation():
     logging.info("="*50)
 
 
+def simple_background_task():
+    """
+    Sadece log yazan ve bir dosya oluşturan en basit arka plan görevi.
+    Ağ bağlantısı veya karmaşık kütüphaneler kullanmaz.
+    """
+    logging.info("--- SIMPLE BACKGROUND TASK STARTED ---")
+    try:
+        with open("test.txt", "w") as f:
+            f.write(f"Hello from the background at {datetime.now()}")
+        logging.info("--- TEST.TXT DOSYASI BAŞARIYLA OLUŞTURULDU ---")
+    except Exception as e:
+        logging.error(f"--- SIMPLE BACKGROUND TASK HATA VERDİ: {e} ---")
+    logging.info("--- SIMPLE BACKGROUND TASK FINISHED ---")
+
+@app.route('/test-background', methods=['POST'])
+def test_background_endpoint():
+    """
+    Basit arka plan görevini test etmek için endpoint.
+    """
+    logging.info("Arka plan test isteği alındı. Basit görev zamanlayıcıya ekleniyor.")
+    scheduler.add_job(simple_background_task, 'date', run_date=datetime.now() + timedelta(seconds=2))
+    return jsonify({"status": "success", "message": "Basit test görevi arka plana eklendi. 5 saniye içinde logları kontrol edin."})
+
 # Zamanlayıcıyı KUR ve BAŞLAT (Gunicorn'un erişebileceği yer)
 # ----------------------------------------------------------------
 scheduler.add_job(trigger_daily_content_generation_with_context, 'cron', hour=8, minute=45)

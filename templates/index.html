@@ -81,10 +81,10 @@
 
             <!-- Ayarlar -->
             <div class="card rounded-lg p-6">
-                <h2 class="text-2xl font-semibold text-white mb-4"><i class="fas fa-cog mr-2"></i>Ayarlar</h2>
-                <p class="mb-4">Agent'ın çalışma ayarlarını buradan yapılandırın (Gelecekte eklenecek).</p>
-                <button class="w-full btn text-white font-bold py-2 px-4 rounded opacity-50 cursor-not-allowed">
-                    Ayarları Yönet
+                <h2 class="text-2xl font-semibold text-white mb-4"><i class="fas fa-vial mr-2"></i>Sistem Testi</h2>
+                <p class="mb-4">Arka plan görevlerinin doğru çalışıp çalışmadığını test etmek için basit bir görev gönderin.</p>
+                <button id="run-simple-test" class="w-full btn bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded">
+                    <i class="fas fa-cogs mr-2"></i>Basit Testi Çalıştır
                 </button>
             </div>
 
@@ -156,6 +156,23 @@
             try {
                 // Bu özellik için yeni bir endpoint oluşturmamız gerekecek
                 responseArea.innerHTML = `<div class="card p-4 text-yellow-400"><p><strong>Bilgi:</strong> Bu özellik yakında eklenecektir. Şimdilik WordPress panelinizden kontrol edebilirsiniz.</p></div>`;
+            } catch (error) {
+                responseArea.innerHTML = `<div class="card p-4 text-red-400"><p><strong>Hata:</strong> ${error.message}</p></div>`;
+            }
+        });
+
+        document.getElementById('run-simple-test').addEventListener('click', async function() {
+            const responseArea = document.getElementById('response-area');
+            responseArea.innerHTML = '<p class="text-center text-yellow-400">Basit test görevi gönderiliyor...</p>';
+
+            try {
+                const response = await fetch('/test-background', { method: 'POST' });
+                const result = await response.json();
+                if (response.ok) {
+                    responseArea.innerHTML = `<div class="card p-4 text-green-400"><p><strong>Test Başlatıldı!</strong> Basit arka plan görevi başarıyla sıraya eklendi. Lütfen 5 saniye içinde Render loglarını kontrol edin.</p></div>`;
+                } else {
+                    throw new Error(result.error || 'Bir hata oluştu.');
+                }
             } catch (error) {
                 responseArea.innerHTML = `<div class="card p-4 text-red-400"><p><strong>Hata:</strong> ${error.message}</p></div>`;
             }
