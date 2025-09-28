@@ -19,6 +19,7 @@ import logging
 import random
 import dateutil.parser
 import json
+from urllib.parse import urlparse, parse_qs
 
 # .env dosyasındaki ortam değişkenlerini yükle
 load_dotenv()
@@ -89,6 +90,23 @@ def test_wordpress_connection():
             "message": f"WordPress'e bağlanırken bir hata oluştu: {e}"
         }), 500
 
+def resolve_redirect_url(url: str):
+    """
+    Verilen bir URL'yi (özellikle Google'ın yönlendirme linklerini) takip ederek
+    nihai (gerçek) URL'yi bulur.
+    """
+    if "vertexaisearch.cloud.google.com" in url:
+        try:
+            # allow_redirects=True ile HEAD isteği yapmak, nihai URL'yi daha hızlı verir
+            response = requests.head(url, timeout=10, allow_redirects=True)
+            final_url = response.url
+            logging.info(f"Yönlendirme çözüldü: '{url}' -> '{final_url}'")
+            return final_url
+        except requests.RequestException as e:
+            logging.error(f"URL yönlendirmesi çözülürken hata: {url}, Hata: {e}")
+            return url # Hata durumunda orijinal URL'yi döndür
+    return url
+
 def search_google(query: str, num_results: int = 10):
     """
     Gemini'nin yerleşik 'google_search' aracını kullanarak bir arama sorgusu gerçekleştirir
@@ -143,13 +161,22 @@ def search_google(query: str, num_results: int = 10):
         data = json.loads(json_string)
         
         found_items = data.get("items", [])
-        if found_items:
-            for i, item in enumerate(found_items):
+        
+        # URL'leri temizle ve standartlaştır
+        cleaned_items = []
+        for item in found_items:
+            original_link = item.get('link')
+            if original_link:
+                item['link'] = resolve_redirect_url(original_link)
+            cleaned_items.append(item)
+
+        if cleaned_items:
+            for i, item in enumerate(cleaned_items):
                  logging.info(f"  Gemini Arama Sonucu {i+1}: Başlık='{item.get('title')}', Link='{item.get('link')}'")
         else:
             logging.info("  Gemini aramasında sonuç bulunamadı.")
             
-        return found_items
+        return cleaned_items
 
     except requests.exceptions.RequestException as e:
         logging.error(f"Gemini arama aracıyla arama sırasında bir hata oluştu: {e}")
@@ -1038,27 +1065,38 @@ def trigger_daily_content_generation():
 
     # Flask uygulama bağlamı (application context) içinde çalıştır
     with app.app_context():
+        # Başlamadan önce mevcut yazıları bir kere çekelim
+        existing_titles = get_wordpress_posts()
+        
         # 0. Adım: Akıllı zamanlamaları oluştur
         schedule_times = get_smart_schedule_times()
         logging.info(f"\nBugünün yayın planı oluşturuldu: {schedule_times}\n")
 
-        # 1. NASA APOD içeriği üret ve zamanla
+        # 1. NASA APOD içeriği üret ve zamanla (eğer zaten yayınlanmamışsa)
         logging.info("\n=== 1/4: NASA APOD İçeriği Üretiliyor ve Zamanlanıyor ===\n")
-        try:
-            logging.info(f"NASA APOD için 'post_nasa_apod_logic' çağrılıyor. Zaman: {schedule_times[0]}")
-            result = post_nasa_apod_logic(schedule_time=schedule_times[0])
-            if result:
-                logging.info(f"NASA APOD içeriği başarıyla oluşturuldu ve {schedule_times[0]} tarihine zamanlandı.")
-            else:
-                logging.warning(f"NASA APOD içeriği oluşturulamadı veya atlandı. Zaman: {schedule_times[0]}")
-        except ValueError as e:
-            logging.error(f"NASA APOD içeriği oluşturulurken veya zamanlanırken bir değer hatası oluştu: {e}")
-        except Exception as e:
-            logging.error(f"NASA APOD içeriği oluşturulurken veya zamanlanırken beklenmedik bir hata oluştu: {e}")
+        
+        today_date_str_for_title = datetime.now().strftime("%d.%m.%Y")
+        expected_apod_title_prefix = f"Günün Astronomi Fotoğrafı ({today_date_str_for_title})"
+        
+        apod_already_posted = any(title.startswith(expected_apod_title_prefix) for title in existing_titles)
 
-        # 2. Mevcut yazıları kontrol et
-        logging.info("\n=== 2/4: Mevcut Yazılar Kontrol Ediliyor ===\n")
-        existing_titles = get_wordpress_posts()
+        if apod_already_posted:
+            logging.info(f"'{expected_apod_title_prefix}' başlıklı APOD yazısı bugün zaten yayınlanmış. Bu adım atlanıyor.")
+        else:
+            try:
+                logging.info(f"NASA APOD için 'post_nasa_apod_logic' çağrılıyor. Zaman: {schedule_times[0]}")
+                result = post_nasa_apod_logic(schedule_time=schedule_times[0])
+                if result:
+                    logging.info(f"NASA APOD içeriği başarıyla oluşturuldu ve {schedule_times[0]} tarihine zamanlandı.")
+                else:
+                    logging.warning(f"NASA APOD içeriği oluşturulamadı veya atlandı. Zaman: {schedule_times[0]}")
+            except ValueError as e:
+                logging.error(f"NASA APOD içeriği oluşturulurken veya zamanlanırken bir değer hatası oluştu: {e}")
+            except Exception as e:
+                logging.error(f"NASA APOD içeriği oluşturulurken veya zamanlanırken beklenmedik bir hata oluştu: {e}")
+
+        # 2. Mevcut yazıları tekrar kontrol etmeye gerek yok, en başta aldık
+        logging.info("\n=== 2/4: Mevcut Yazılar Kontrol Ediliyor (Adım atlandı, başlangıçta yapıldı) ===\n")
         
         # 3. Güncel konuları keşfet
         logging.info("\n=== 3/4: Güncel Konular Keşfediliyor ===\n")
