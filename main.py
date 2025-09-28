@@ -994,12 +994,16 @@ def trigger_daily_content_generation():
         # 1. NASA APOD içeriği üret ve zamanla
         logging.info("\n=== 1/4: NASA APOD İçeriği Üretiliyor ve Zamanlanıyor ===\n")
         try:
-            # Yerel URL'ye istek göndermek yerine doğrudan fonksiyonu çağır
-            logging.info(f"NASA APOD içeriği oluşturuluyor ve {schedule_times[0]} tarihine zamanlanıyor.")
-            post_nasa_apod_logic(schedule_time=schedule_times[0])
-            logging.info(f"NASA APOD içeriği başarıyla oluşturuldu ve {schedule_times[0]} tarihine zamanlandı.")
+            logging.info(f"NASA APOD için 'post_nasa_apod_logic' çağrılıyor. Zaman: {schedule_times[0]}")
+            result = post_nasa_apod_logic(schedule_time=schedule_times[0])
+            if result:
+                logging.info(f"NASA APOD içeriği başarıyla oluşturuldu ve {schedule_times[0]} tarihine zamanlandı.")
+            else:
+                logging.warning(f"NASA APOD içeriği oluşturulamadı veya atlandı. Zaman: {schedule_times[0]}")
+        except ValueError as e:
+            logging.error(f"NASA APOD içeriği oluşturulurken veya zamanlanırken bir değer hatası oluştu: {e}")
         except Exception as e:
-            logging.error(f"NASA APOD içeriği oluşturulurken veya zamanlanırken hata oluştu: {e}")
+            logging.error(f"NASA APOD içeriği oluşturulurken veya zamanlanırken beklenmedik bir hata oluştu: {e}")
 
         # 2. Mevcut yazıları kontrol et
         logging.info("\n=== 2/4: Mevcut Yazılar Kontrol Ediliyor ===\n")
