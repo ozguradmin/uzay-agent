@@ -88,7 +88,7 @@ def test_wordpress_connection():
             "message": f"WordPress'e bağlanırken bir hata oluştu: {e}"
         }), 500
 
-def search_google(query: str, num_results: int = 5, time_filter: str = None):
+def search_google(query: str, num_results: int = 20, time_filter: str = None):
     """
     Google Custom Search API kullanarak bir arama sorgusu gerçekleştirir.
     time_filter: "qdr:d" (son 24 saat), "qdr:w" (son hafta), "qdr:m" (son ay)
@@ -926,30 +926,35 @@ def discover_trending_topics():
     try:
         # Güncel uzay konuları için arama terimleri - İngilizce + çeşitli ve viral
         search_terms = [
-            "latest space news 24 hours",
-            "recent astronomy discoveries today",
-            "new exoplanet findings",
-            "NASA mission updates",
-            "ESA space news",
-            "cutting-edge space technology",
-            "black hole latest research",
-            "galaxy evolution recent studies",
-            "cosmic phenomena current events",
-            "solar system recent observations"
+            "latest space news today",
+            "recent astronomy discoveries",
+            "new exoplanet discoveries",
+            "NASA mission updates latest",
+            "ESA space news recent",
+            "cutting-edge space technology breakthroughs",
+            "black hole discoveries recent",
+            "galaxy evolution latest research",
+            "cosmic phenomena breaking news",
+            "solar system recent observations",
+            "space exploration recent findings",
+            "astrophysics news today",
+            "space science latest breakthroughs",
+            "current events in space",
+            "universe news recent"
         ]
         
         all_results = []
         
         for term in search_terms:
             logging.info(f"'{term}' aranıyor...")
-            results = search_google(term, num_results=10, time_filter="qdr:d")  # Her terimden daha fazla sonuç al
+            results = search_google(term, num_results=20, time_filter="qdr:d")  # Her terimden daha fazla sonuç al
             if results:
                 all_results.extend(results)  # Tüm sonuçları ekle, sonra Gemini filtreleyecek
         
         # Sonuçları Gemini'ye gönder ve ilgi çekici konuları filtrele
         if all_results:
-            # Sadece ilk 10 sonucu Gemini'ye gönder, çok uzun olmaması için
-            logging.info(f"Gemini'ye gönderilen ham arama sonuçları: {chr(10).join([f'  - {item.get('title', '')} ({item.get('link', '')})' for item in all_results[:10]])}")
+            # Sadece ilk 20 sonucu Gemini'ye gönder, çok uzun olmaması için
+            logging.info(f"Gemini'ye gönderilen ham arama sonuçları: {chr(10).join([f'  - {item.get('title', '')} ({item.get('link', '')})' for item in all_results[:20]])}")
             topics_prompt = f"""
             Sen bir uzay ve astronomi içerik editörüsün. Aşağıdaki güncel haberleri analiz et ve galaktikuzay.com için en ilgi çekici 3 konuyu seç.
             
