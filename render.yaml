@@ -4,7 +4,7 @@ services:
     name: uzay-agent
     env: python
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn -c gunicorn_config.py 'main:app'"
+    startCommand: "gunicorn 'main:app'"
     envVars:
       - fromGroup: uzay-agent-secrets
 

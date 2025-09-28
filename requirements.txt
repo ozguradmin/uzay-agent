@@ -6,6 +6,4 @@ pillow
 google-auth
 google-auth-oauthlib
 requests-oauthlib
-apscheduler
 gunicorn
-gevent

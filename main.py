@@ -13,9 +13,7 @@ from google.oauth2 import service_account
 from google.auth.transport.requests import Request
 import google.auth
 import google.auth.transport.requests
-from apscheduler.schedulers.background import BackgroundScheduler
-import atexit
-import random
+import threading
 import time
 import logging
 
@@ -26,9 +24,6 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 app = Flask(__name__)
-
-# Zamanlayıcıyı global olarak tanımla
-scheduler = BackgroundScheduler(daemon=True)
 
 @app.route('/')
 def admin_panel():
@@ -645,32 +640,6 @@ def generate_and_post_logic(topic: str, schedule_time: str = None):
         return jsonify({"error": f"İşlem sırasında beklenmedik bir hata oluştu: {e}"}), 500
 
 
-@app.route('/generate-and-post', methods=['POST'])
-def generate_and_post_endpoint():
-    """
-    Panelden gelen manuel bir içerik üretim isteğini alır ve
-    bu görevi arka planda çalışması için zamanlayıcıya ekler.
-    """
-    data = request.json
-    topic = data.get('topic')
-    schedule_time_str = data.get('schedule_time')
-
-    if not topic:
-        return jsonify({"error": "Lütfen bir içerik konusu belirtin."}), 400
-    
-    # Görevi hemen şimdi çalışması için zamanlayıcıya ekle
-    scheduler.add_job(
-        generate_and_post_logic_with_context, 
-        'date', 
-        run_date=datetime.now() + timedelta(seconds=1), 
-        args=[topic, schedule_time_str]
-    )
-
-    return jsonify({
-        "status": "success", 
-        "message": f"'{topic}' konusu için içerik üretme görevi arka plana alındı. Birkaç dakika içinde 'Zamanlanmış Gönderiler' listesinde görebilirsiniz."
-    })
-
 def generate_and_post_logic_with_context(topic: str, schedule_time_str: str = None):
     """
     Flask uygulama bağlamı (app context) içinde generate_and_post_logic'i çalıştırır.
@@ -1024,29 +993,6 @@ def is_semantically_similar(new_topic: str, existing_titles: list) -> bool:
         return True
 
 
-@app.route('/generate-daily-content', methods=['POST'])
-def generate_daily_content_endpoint():
-    """
-    Günlük içerik üretimini manuel olarak tetiklemek için endpoint.
-    """
-    # Süreci arka planda başlat
-    scheduler.add_job(trigger_daily_content_generation_with_context)
-    return jsonify({
-        "status": "success",
-        "message": "Günlük içerik üretim süreci arka planda başlatıldı. Terminal loglarını kontrol edin."
-    })
-
-
-def trigger_daily_content_generation_with_context():
-    """
-    Flask uygulama bağlamı (app context) içinde trigger_daily_content_generation'ı çalıştırır.
-    Zamanlayıcı tarafından çağrılmak için gereklidir.
-    """
-    logging.info("[LOG] trigger_daily_content_generation_with_context BAŞLADI")
-    with app.app_context():
-        trigger_daily_content_generation()
-    logging.info("[LOG] trigger_daily_content_generation_with_context BİTTİ")
-
 def trigger_daily_content_generation():
     logging.info("="*50)
     logging.info(f"OTOMATİK GÜNLÜK İÇERİK ÜRETİMİ BAŞLATILDI - {datetime.now()}")
@@ -1131,20 +1077,37 @@ def test_background_endpoint():
     Basit arka plan görevini test etmek için endpoint.
     """
     logging.info("Arka plan test isteği alındı. Basit görev zamanlayıcıya ekleniyor.")
-    scheduler.add_job(simple_background_task, 'date', run_date=datetime.now() + timedelta(seconds=2))
+    # scheduler.add_job(simple_background_task, 'date', run_date=datetime.now() + timedelta(seconds=2)) # Removed as per new_code
+    trigger_thread = threading.Thread(target=simple_background_task)
+    trigger_thread.start()
     return jsonify({"status": "success", "message": "Basit test görevi arka plana eklendi. 5 saniye içinde logları kontrol edin."})
 
-# Zamanlayıcıyı KUR ve BAŞLAT (Gunicorn'un erişebileceği yer)
-# ----------------------------------------------------------------
-scheduler.add_job(trigger_daily_content_generation_with_context, 'cron', hour=8, minute=45)
-scheduler.start()
+def scheduler_loop():
+    """
+    Her 60 saniyede bir saati kontrol eden ve doğru zamanda ana görevi tetikleyen
+    basit ve güvenilir zamanlayıcı döngüsü.
+    """
+    logging.info("Sağlam Zamanlayıcı Döngüsü Başlatıldı.")
+    while True:
+        now = datetime.now()
+        # Her gün 08:45'te çalıştır
+        if now.hour == 8 and now.minute == 45:
+            logging.info("Zaman geldi! Otomatik içerik üretimi tetikleniyor...")
+            # Ana görevi ayrı bir thread'de başlat ki ana döngüyü bloklamasın
+            trigger_thread = threading.Thread(target=trigger_daily_content_generation_with_context)
+            trigger_thread.start()
+            # Görevin aynı dakika içinde tekrar tetiklenmemesi için 61 saniye bekle
+            time.sleep(61)
+        else:
+            # Bir sonraki kontrol için 60 saniye bekle
+            time.sleep(60)
 
-# Uygulama kapatıldığında zamanlayıcıyı güvenli bir şekilde kapat
-atexit.register(lambda: scheduler.shutdown())
-# ----------------------------------------------------------------
+# Zamanlayıcı döngüsünü ana uygulamadan ayrı bir thread'de başlat
+scheduler_thread = threading.Thread(target=scheduler_loop)
+scheduler_thread.daemon = True
+scheduler_thread.start()
 
 if __name__ == '__main__':
-    # Bu blok artık sadece bilgisayarınızda yerel test için kullanılacak.
-    # Render bu kısmı çalıştırmaz.
+    # Flask uygulamasını başlat
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
