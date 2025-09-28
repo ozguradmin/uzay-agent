@@ -16,6 +16,7 @@ import google.auth.transport.requests
 import threading
 import time
 import logging
+import random
 
 # .env dosyasındaki ortam değişkenlerini yükle
 load_dotenv()
