@@ -1094,7 +1094,7 @@ def scheduler_loop():
         if now.hour == 8 and now.minute == 45:
             logging.info("Zaman geldi! Otomatik içerik üretimi tetikleniyor...")
             # Ana görevi ayrı bir thread'de başlat ki ana döngüyü bloklamasın
-            trigger_thread = threading.Thread(target=trigger_daily_content_generation_with_context)
+            trigger_thread = threading.Thread(target=trigger_daily_content_generation)
             trigger_thread.start()
             # Görevin aynı dakika içinde tekrar tetiklenmemesi için 61 saniye bekle
             time.sleep(61)
