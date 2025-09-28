@@ -113,9 +113,18 @@ def search_google(query: str, num_results: int = 5, time_filter: str = None):
         # Zaman filtresi ekle
         if time_filter:
             search_params['dateRestrict'] = time_filter
-            
+        
+        logging.info(f"Google Custom Search API'ye gönderilen parametreler: {search_params}")
         result = service.cse().list(**search_params).execute()
-        return result.get('items', [])
+        
+        found_items = result.get('items', [])
+        if found_items:
+            for i, item in enumerate(found_items):
+                logging.info(f"  Google Arama Sonucu {i+1}: Başlık='{item.get('title')}', Link='{item.get('link')}'")
+        else:
+            logging.info("  Google aramasında sonuç bulunamadı.")
+        
+        return found_items
     except Exception as e:
         logging.error(f"Google araması sırasında bir hata oluştu: {e}")
         return []
@@ -902,6 +911,7 @@ def discover_trending_topics():
         
         # Sonuçları Gemini'ye gönder ve ilgi çekici konuları filtrele
         if all_results:
+            logging.info(f"Gemini'ye gönderilen ham arama sonuçları: {chr(10).join([f'  - {item.get('title', '')} ({item.get('link', '')})' for item in all_results[:10]])}")
             topics_prompt = f"""
             Sen bir uzay ve astronomi içerik editörüsün. Aşağıdaki güncel haberleri analiz et ve galaktikuzay.com için en ilgi çekici 3 konuyu seç.
             
@@ -923,7 +933,9 @@ def discover_trending_topics():
             Sadece konu başlıklarını, her satırda bir tane olacak şekilde listele. Açıklama ekleme.
             """
             
+            logging.info(f"Gemini'ye gönderilen konu keşfi promptu: \n---\n{topics_prompt}\n---")
             topics_response = generate_content_with_gemini(topics_prompt)
+            logging.info(f"Gemini'den dönen ham konu fikirleri: \n---\n{topics_response}\n---")
             topics = [line.strip() for line in topics_response.split('\n') if line.strip()]
             
             # Her konuyu temizle
