@@ -758,12 +758,16 @@ def post_to_wordpress(title: str, content: str, featured_media_id: int = None, m
     if meta_title:
         post_data["title"] = meta_title  # Use meta_title directly for focus keyphrase
         # Yoast SEO meta fields
+        focus_keyword = meta_keywords.split(',')[0].strip() if meta_keywords else ""
         post_data["meta"] = {
             "_yoast_wpseo_title": meta_title,
             "_yoast_wpseo_metadesc": meta_description[:155] if meta_description else "",
-            "_yoast_wpseo_focuskw": meta_keywords.split(',')[0].strip() if meta_keywords else "",  # First keyword as focus keyphrase
+            "_yoast_wpseo_focuskw": focus_keyword,  # First keyword as focus keyphrase
             "_yoast_wpseo_keywords": meta_keywords if meta_keywords else ""
         }
+        logging.info(f"[POST] Yoast meta alanları eklendi: focus_kw='{focus_keyword}', meta_desc='{meta_description[:50] if meta_description else 'None'}...'")
+    else:
+        logging.warning("[POST] meta_title boş, Yoast meta alanları eklenmedi!")
 
     if meta_description:
         post_data["excerpt"] = meta_description[:155] # Use excerpt for meta description (Yoast SEO reads from excerpt)
@@ -1170,6 +1174,8 @@ def post_nasa_apod_logic(schedule_time: str = None):
             etiketler = parts[4].replace('[ETİKETLER]', '').strip() if len(parts) > 4 else ""
             yazi_basligi = parts[5].replace('[YAZI BAŞLIĞI]', '').strip() if len(parts) > 5 else seo_baslik
             
+            logging.info(f"[APOD] SEO alanları parse edildi: meta_baslik='{meta_baslik[:30]}...', meta_aciklama='{meta_aciklama[:30] if meta_aciklama else 'None'}...', meta_keywords='{meta_keywords[:30] if meta_keywords else 'None'}...'")
+            
             content_block = parts[6].replace('[İÇERİK]', '').strip() if len(parts) > 6 else ""
             content_lines = content_block.split('\n')
             main_content_parts = []
@@ -1240,8 +1246,19 @@ def post_nasa_apod_logic(schedule_time: str = None):
         today_date = datetime.now().strftime("%d.%m.%Y")
         final_title = f"Günün Astronomi Fotoğrafı ({today_date}): {seo_baslik}"  # Günün astronomi fotoğrafı ve tarih ekle
         
-        # Kısa slug oluştur (SEO için optimize edilmiş)
-        short_slug = f"apod-{today_date.replace('.', '')}-{seo_baslik.lower().replace(' ', '-').replace(':', '').replace('(', '').replace(')', '')[:30]}"
+        # Kısa slug oluştur (SEO için optimize edilmiş, Türkçe karakterleri İngilizce yap)
+        def turkish_to_english(text):
+            replacements = {
+                'ğ': 'g', 'ü': 'u', 'ş': 's', 'ı': 'i', 'ö': 'o', 'ç': 'c',
+                'Ğ': 'G', 'Ü': 'U', 'Ş': 'S', 'I': 'I', 'İ': 'I', 'Ö': 'O', 'Ç': 'C'
+            }
+            for tr, en in replacements.items():
+                text = text.replace(tr, en)
+            return text
+        
+        clean_title = turkish_to_english(seo_baslik.lower())
+        clean_title = clean_title.replace(' ', '-').replace(':', '').replace('(', '').replace(')', '').replace(',', '').replace('.', '')
+        short_slug = f"apod-{today_date.replace('.', '')}-{clean_title[:25]}"
         
         logging.info(f"[APOD] WordPress post gönderimi başlıyor: featured_media_id={media_id}, schedule_time={schedule_time}, slug={short_slug}")
         post_details = post_to_wordpress(final_title, final_content, featured_media_id=media_id, meta_description=meta_aciklama, schedule_time=schedule_time, slug=short_slug, meta_title=meta_baslik, meta_keywords=meta_keywords)
