@@ -137,6 +137,62 @@ def resolve_redirect_url(url: str):
     logging.warning(f"Geçersiz URL formatı: {url}")
     return url
 
+def is_article_like_url(url: str) -> bool:
+    """
+    K�k ana sayfa/konu etiket sayfalar�n� ele ve muhabir sayfalar�n� ele. Makale format�na benzer URL'leri tut.
+    Basit sezgisel: path uzun ve en az bir '-' veya rakam i�ersin; domain anasayfas� olmas�n.
+    """
+    try:
+        parsed = urlparse(url)
+        if not parsed.scheme or not parsed.netloc:
+            return False
+        path = parsed.path or "/"
+        # Anasayfa veya tek segment k�sa yol sayfalar� ele
+        if path == "/" or len([p for p in path.split('/') if p]) < 1:
+            return False
+        # Sadece konu indexleri ("/topic/astronomy" gibi) ve genel dizinleri ele
+        if any(seg in path.lower() for seg in ["/tag/", "/topic/", "/category/", "/news/", "/space/"]):
+            # e�er detay segmenti yoksa ele
+            if len([p for p in path.split('/') if p]) <= 2:
+                return False
+        # URL i�inde tarih veya ay�r�c� varl��� bir ipucu
+        if any(ch.isdigit() for ch in path) or '-' in path:
+            return True
+        return False
+    except Exception:
+        return False
+
+def is_recent_url(url: str, hours: int = 48) -> bool:
+    """
+    Yay�n tarihine eri�emedi�imiz sitelerde URL deseninden kaba bir filtre uygular.
+    Tercihen i�inde y�l (2025) ve ay/g�n desenleri ("/09/", "-2025-09-") arar.
+    Aksi halde bilinen g�ncel kaynak alan adlar� i�in izin verir.
+    """
+    try:
+        parsed = urlparse(url)
+        host = parsed.netloc.lower()
+        path = (parsed.path or '').lower()
+        # Google/redirect ve video sitelerini ele
+        if any(bad in host for bad in [
+            'vertexaisearch.cloud.google.com', 'dailymotion.com', 'youtube.com', 'youtu.be'
+        ]):
+            return False
+        # Y�l ve ay i�eren URL'leri �ncelikle kabul et
+        current_year = datetime.now().year
+        if str(current_year) in path and any(f"/{m:02d}/" in path or f"-{current_year}-{m:02d}-" in path for m in range(1,13)):
+            return True
+        # Baz� siteler "today/live" sayfalar� kullan�r; izin ver
+        if any(kw in path for kw in ["live", "today", "breaking", "latest"]):
+            return True
+        # Uzay hava durumu ve f�rlatma ajandalar� ger�ek zamanl� olabilir
+        if any(domain in host for domain in [
+            'spaceflightnow.com', 'rocketlaunch.org', 'spaceweatherlive.com', 'spaceweather.gov', 'swpc.noaa.gov', 'metoffice.gov.uk'
+        ]):
+            return True
+        return False
+    except Exception:
+        return False
+
 def search_google(query: str, num_results: int = 10):
     """
     Gemini'nin yerleşik 'google_search' aracını kullanarak bir arama sorgusu gerçekleştirir
@@ -191,8 +247,8 @@ def search_google(query: str, num_results: int = 10):
         data = json.loads(json_string)
         
         found_items = data.get("items", [])
-        
-        # URL'leri temizle ve standartlaştır
+
+        # URL'leri temizle ve standartlatr
         cleaned_items = []
         for item in found_items:
             original_link = item.get('link')
@@ -200,13 +256,23 @@ def search_google(query: str, num_results: int = 10):
                 item['link'] = resolve_redirect_url(original_link)
             cleaned_items.append(item)
 
-        if cleaned_items:
-            for i, item in enumerate(cleaned_items):
-                 logging.info(f"  Gemini Arama Sonucu {i+1}: Başlık='{item.get('title')}', Link='{item.get('link')}'")
+        # Makale benzeri ve gcncel URL'leri filtrele
+        filtered_items = []
+        for it in cleaned_items:
+            link = it.get('link') or ''
+            if is_article_like_url(link) and is_recent_url(link, hours=48):
+                filtered_items.append(it)
+
+        removed = max(0, len(cleaned_items) - len(filtered_items))
+        logging.info(f"  Arama sonucu: {len(found_items)} ham, {len(cleaned_items)} temiz, {len(filtered_items)} filtrelenmiş (ele: {removed})")
+
+        if filtered_items:
+            for i, item in enumerate(filtered_items[:15]):
+                 logging.info(f"  Seçilen {i+1}: Başlık='{item.get('title')}', Link='{item.get('link')}'")
         else:
             logging.info("  Gemini aramasında sonuç bulunamadı.")
             
-        return cleaned_items
+        return filtered_items
 
     except requests.exceptions.RequestException as e:
         logging.error(f"Gemini arama aracıyla arama sırasında bir hata oluştu: {e}")
@@ -763,6 +829,8 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
                 ai_media1_url = ai_media1_info.get('url')
                 ai_media1_id = ai_media1_info.get('id')
                 featured_media_id_to_use = ai_media1_id # İlk görseli öne çıkan yap
+            else:
+                logging.warning("İlk AI görseli WordPress'e yüklenemedi. (upload başarısız)")
         
         # İkinci görsel
         ai_image2_data = generate_ai_image(ai_image2_prompt)
@@ -778,9 +846,11 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
                 # Eğer ilk görsel başarısız olduysa, ikinciyi öne çıkan yap
                 if not featured_media_id_to_use:
                     featured_media_id_to_use = ai_media2_id
+            else:
+                logging.warning("İkinci AI görseli WordPress'e yüklenemedi. (upload başarısız)")
         
         if not featured_media_id_to_use:
-            logging.warning(f"'{seo_baslik}' konusu için her iki AI görseli de üretilemedi. Yazı görsel olmadan yayınlanacak.")
+            logging.warning(f"'{seo_baslik}' konusu için kullanılabilir AI görseli bulunamadı veya yüklenemedi. Yazı görsel olmadan yayınlanacak.")
 
         # 4. Adım: Tamamen formatlanmış içeriği oluştur
         final_content = build_wordpress_content(
@@ -1363,10 +1433,10 @@ def scheduler_loop():
         
         # Her 5 dakikada bir zamanlayıcının çalıştığını logla (daha sık ping için)
         if now.minute % 5 == 0 and now.second < 10:
-            logging.info(f"Zamanlayıcı aktif - Şu anki zaman: {now.strftime('%H:%M:%S')} - Hedef zaman: 11:32")
+            logging.info(f"Zamanlayıcı aktif - Şu anki zaman: {now.strftime('%H:%M:%S')} - Hedef zaman: 12:08")
         
-        # Her gün 11:32'de çalıştır (AMA sadece bir kez!)
-        if now.hour == 11 and now.minute == 32:
+        # Her gün 12:08'de çalıştır (AMA sadece bir kez!)
+        if now.hour == 12 and now.minute == 8:
             # Bugün daha önce çalıştı mı kontrol et
             if last_execution_date != current_date:
                 logging.info("Zaman geldi! Otomatik içerik üretimi tetikleniyor...")
@@ -1375,7 +1445,7 @@ def scheduler_loop():
                 trigger_thread.start()
                 # Bugün çalıştığını işaretle
                 last_execution_date = current_date
-                logging.info(f"Günlük işlem tamamlandı. Bir sonraki çalışma: {(now + timedelta(days=1)).strftime('%Y-%m-%d 11:32')}")
+                logging.info(f"Günlük işlem tamamlandı. Bir sonraki çalışma: {(now + timedelta(days=1)).strftime('%Y-%m-%d 12:08')}")
                 # Görevin aynı dakika içinde tekrar tetiklenmemesi için 61 saniye bekle
                 time.sleep(61)
             else:
