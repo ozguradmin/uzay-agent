@@ -498,12 +498,14 @@ def upload_image_to_wordpress(title: str, image_url: str = None, image_data: byt
         image_content = image_data
     elif image_url:
         try:
+            logging.info(f"[MEDIA] Uzak görsel indiriliyor: {image_url}")
             image_response = requests.get(image_url, stream=True, timeout=30)
             image_response.raise_for_status()
             image_name = image_url.split("/")[-1]
             image_content = image_response.content
+            logging.info(f"[MEDIA] Uzak görsel indirildi: ad={image_name}, boyut={len(image_content)} bayt")
         except requests.exceptions.RequestException as e:
-            logging.error(f"Görsel indirilirken hata: {e}")
+            logging.error(f"[MEDIA] Görsel indirilirken hata: {e}")
             return None
     
     if not image_content:
@@ -579,17 +581,19 @@ def ensure_tag_ids(tag_names: list) -> list:
         files = {
             'file': (image_name, optimized_image_data, 'image/jpeg')
         }
+        logging.info(f"[MEDIA] WordPress'e yükleme başlıyor: url={media_api_url}, dosya={image_name}, boyut={len(optimized_image_data)}")
         upload_response = requests.post(media_api_url, headers=headers, files=files, timeout=60)
         upload_response.raise_for_status()
         media_data = upload_response.json()
-        logging.info(f"Görsel başarıyla yüklendi. Media ID: {media_data['id']}")
+        logging.info(f"[MEDIA] Görsel başarıyla yüklendi. Media ID: {media_data.get('id')}, source_url: {media_data.get('source_url')}")
         return {
             "id": media_data['id'],
             "url": media_data['source_url']
         }
     except requests.exceptions.RequestException as e:
-        logging.error(f"Görsel WordPress'e yüklenirken hata: {e}")
-        logging.error(f"Hata detayı: {e.response.text if e.response else 'Yanıt yok'}")
+        body = e.response.text if getattr(e, 'response', None) is not None else 'Yanıt yok'
+        status = e.response.status_code if getattr(e, 'response', None) is not None else 'N/A'
+        logging.error(f"[MEDIA] WordPress'e yükleme HATASI: http_status={status}, detay={body}")
         return None
 
 def get_nasa_apod():
@@ -663,6 +667,7 @@ def post_to_wordpress(title: str, content: str, featured_media_id: int = None, m
         post_data['status'] = 'future'
         post_data['date'] = schedule_time
 
+    logging.info(f"[POST] WP istek hazir: url={api_url}, has_featured={'yes' if featured_media_id else 'no'}, tags={post_data.get('tags')}, status={post_data.get('status')}, date={post_data.get('date')}")
     response = requests.post(api_url, headers=headers, json=post_data, timeout=30)
     try:
         response.raise_for_status()
@@ -893,7 +898,7 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
         )
 
         # 5. Adım: WordPress'e gönder
-        logging.info(f"'{seo_baslik}' başlıklı yazı WordPress'e gönderiliyor...")
+        logging.info(f"[POST] WordPress post gönderimi başlıyor: featured_media_id={featured_media_id_to_use}, schedule_time={schedule_time}")
         post_details = post_to_wordpress(
             title=seo_baslik,
             content=final_content,
@@ -904,7 +909,7 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
             tags=[tag.strip() for tag in etiketler.split(',') if tag.strip()] if etiketler else [],
             schedule_time=schedule_time
         )
-        logging.info(f"BAŞARILI: Google içerik gönderildi. Post ID: {post_details.get('id')}, featured_media_id: {featured_media_id_to_use}")
+        logging.info(f"[POST] POST OK: id={post_details.get('id')}, status={post_details.get('status')}, date={post_details.get('date')}")
 
         return True # Başarılı olduğunu belirtmek için True döndür
 
@@ -1114,9 +1119,9 @@ def post_nasa_apod_logic(schedule_time: str = None):
         # 6. Adım: Yazıyı WordPress'e gönder
         today_date = datetime.now().strftime("%d.%m.%Y")
         final_title = f"Günün Astronomi Fotoğrafı ({today_date}): {seo_baslik}"  # Günün astronomi fotoğrafı ve tarih ekle
-        logging.info(f"'{final_title}' başlıklı yazı WordPress'e gönderiliyor...")
+        logging.info(f"[APOD] WordPress post gönderimi başlıyor: featured_media_id={media_id}, schedule_time={schedule_time}")
         post_details = post_to_wordpress(final_title, final_content, featured_media_id=media_id, meta_description=meta_aciklama, schedule_time=schedule_time)
-        logging.info(f"BAŞARILI: NASA APOD içeriği gönderildi. Post ID: {post_details.get('id')}, featured_media_id: {media_id}")
+        logging.info(f"[APOD] POST OK: id={post_details.get('id')}, status={post_details.get('status')}, date={post_details.get('date')}")
         return True # Başarılı olduğunu belirtmek için True döndür
     
     except ValueError as e:
@@ -1464,10 +1469,10 @@ def scheduler_loop():
         
         # Her 5 dakikada bir zamanlayıcının çalıştığını logla (daha sık ping için)
         if now.minute % 5 == 0 and now.second < 10:
-            logging.info(f"Zamanlayıcı aktif - Şu anki zaman: {now.strftime('%H:%M:%S')} - Hedef zaman: 13:49")
+            logging.info(f"Zamanlayıcı aktif - Şu anki zaman: {now.strftime('%H:%M:%S')} - Hedef zaman: 14:15")
         
-        # Her gün 13:49'da çalıştır (AMA sadece bir kez!)
-        if now.hour == 13 and now.minute == 49:
+        # Her gün 14:15'te çalıştır (AMA sadece bir kez!)
+        if now.hour == 14 and now.minute == 15:
             # Bugün daha önce çalıştı mı kontrol et
             if last_execution_date != current_date:
                 logging.info("Zaman geldi! Otomatik içerik üretimi tetikleniyor...")
@@ -1476,7 +1481,7 @@ def scheduler_loop():
                 trigger_thread.start()
                 # Bugün çalıştığını işaretle
                 last_execution_date = current_date
-                logging.info(f"Günlük işlem tamamlandı. Bir sonraki çalışma: {(now + timedelta(days=1)).strftime('%Y-%m-%d 13:49')}")
+                logging.info(f"Günlük işlem tamamlandı. Bir sonraki çalışma: {(now + timedelta(days=1)).strftime('%Y-%m-%d 14:15')}")
                 # Görevin aynı dakika içinde tekrar tetiklenmemesi için 61 saniye bekle
                 time.sleep(61)
         else:
