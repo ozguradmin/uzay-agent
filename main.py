@@ -665,7 +665,7 @@ def post_to_wordpress(title: str, content: str, featured_media_id: int = None, m
 
     response = requests.post(api_url, headers=headers, json=post_data, timeout=30)
     try:
-    response.raise_for_status()
+        response.raise_for_status()
     except requests.exceptions.HTTPError as e:
         logging.error(f"WordPress post hatası: {e}")
         logging.error(f"WP Yanıtı: {response.status_code} - {response.text}")
