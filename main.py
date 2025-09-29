@@ -655,7 +655,7 @@ def post_to_wordpress(title: str, content: str, featured_media_id: int = None, m
     
     if meta_fields:
         post_data["meta"] = meta_fields
-    
+
     if schedule_time:
         post_data["date"] = schedule_time
     
@@ -1135,7 +1135,7 @@ def post_nasa_apod_logic(schedule_time: str = None):
         logging.error(f"İşlem sırasında beklenmedik bir hata oluştu: {e}")
         return None
     finally:
-        logging.info("[LOG] post_nasa_apod_logic BİTTİ")
+    logging.info("[LOG] post_nasa_apod_logic BİTTİ")
 
 
 def get_wordpress_posts(limit=100):
@@ -1347,17 +1347,17 @@ def trigger_daily_content_generation():
         if apod_already_posted:
             logging.info(f"'{expected_apod_title_prefix}' başlıklı APOD yazısı bugün zaten yayınlanmış. Bu adım atlanıyor.")
         else:
-            try:
-                logging.info(f"NASA APOD için 'post_nasa_apod_logic' çağrılıyor. Zaman: {schedule_times[0]}")
-                result = post_nasa_apod_logic(schedule_time=schedule_times[0])
-                if result:
-                    logging.info(f"NASA APOD içeriği başarıyla oluşturuldu ve {schedule_times[0]} tarihine zamanlandı.")
-                else:
+        try:
+            logging.info(f"NASA APOD için 'post_nasa_apod_logic' çağrılıyor. Zaman: {schedule_times[0]}")
+            result = post_nasa_apod_logic(schedule_time=schedule_times[0])
+            if result:
+                logging.info(f"NASA APOD içeriği başarıyla oluşturuldu ve {schedule_times[0]} tarihine zamanlandı.")
+            else:
                     logging.error(f"!!! HATA: NASA APOD içeriği oluşturulamadı veya atlandı. Zaman: {schedule_times[0]}")
-            except ValueError as e:
-                logging.error(f"NASA APOD içeriği oluşturulurken veya zamanlanırken bir değer hatası oluştu: {e}")
-            except Exception as e:
-                logging.error(f"NASA APOD içeriği oluşturulurken veya zamanlanırken beklenmedik bir hata oluştu: {e}")
+        except ValueError as e:
+            logging.error(f"NASA APOD içeriği oluşturulurken veya zamanlanırken bir değer hatası oluştu: {e}")
+        except Exception as e:
+            logging.error(f"NASA APOD içeriği oluşturulurken veya zamanlanırken beklenmedik bir hata oluştu: {e}")
 
         # 2. Mevcut yazıları tekrar kontrol etmeye gerek yok, en başta aldık
         logging.info("\n=== 2/4: Mevcut Yazılar Kontrol Ediliyor (Adım atlandı, başlangıçta yapıldı) ===\n")
@@ -1473,10 +1473,10 @@ def scheduler_loop():
         
         # Her 5 dakikada bir zamanlayıcının çalıştığını logla (daha sık ping için)
         if now.minute % 5 == 0 and now.second < 10:
-            logging.info(f"Zamanlayıcı aktif - Şu anki zaman: {now.strftime('%H:%M:%S')} - Hedef zaman: 13:15")
+            logging.info(f"Zamanlayıcı aktif - Şu anki zaman: {now.strftime('%H:%M:%S')} - Hedef zaman: 13:19")
         
-        # Her gün 13:15'de çalıştır (AMA sadece bir kez!)
-        if now.hour == 13 and now.minute == 15:
+        # Her gün 13:19'de çalıştır (AMA sadece bir kez!)
+        if now.hour == 13 and now.minute == 19:
             # Bugün daha önce çalıştı mı kontrol et
             if last_execution_date != current_date:
                 logging.info("Zaman geldi! Otomatik içerik üretimi tetikleniyor...")
@@ -1485,7 +1485,7 @@ def scheduler_loop():
                 trigger_thread.start()
                 # Bugün çalıştığını işaretle
                 last_execution_date = current_date
-                logging.info(f"Günlük işlem tamamlandı. Bir sonraki çalışma: {(now + timedelta(days=1)).strftime('%Y-%m-%d 13:15')}")
+                logging.info(f"Günlük işlem tamamlandı. Bir sonraki çalışma: {(now + timedelta(days=1)).strftime('%Y-%m-%d 13:19')}")
                 # Görevin aynı dakika içinde tekrar tetiklenmemesi için 61 saniye bekle
                 time.sleep(61)
             else:
