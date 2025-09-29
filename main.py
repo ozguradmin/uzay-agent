@@ -1481,10 +1481,11 @@ def generate_apod_endpoint():
     logging.info("APOD test isteği alındı. Arka planda başlatılıyor...")
     def _run():
         try:
-            # En yakın saat için hemen zamanla
-            schedule_time = datetime.now().isoformat()
-            res = post_nasa_apod_logic(schedule_time=schedule_time)
-            logging.info(f"[APOD TEST] Tamamlandı. Sonuç: {res}")
+            with app.app_context():
+                # En yakın saat için hemen zamanla
+                schedule_time = datetime.now().isoformat()
+                res = post_nasa_apod_logic(schedule_time=schedule_time)
+                logging.info(f"[APOD TEST] Tamamlandı. Sonuç: {res}")
         except Exception as e:
             logging.error(f"[APOD TEST] Hata: {e}")
     trigger_thread = threading.Thread(target=_run)
