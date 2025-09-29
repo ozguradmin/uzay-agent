@@ -1254,10 +1254,10 @@ def scheduler_loop():
         
         # Her 10 dakikada bir zamanlayıcının çalıştığını logla
         if now.minute % 10 == 0 and now.second == 0:
-            logging.info(f"Zamanlayıcı aktif - Şu anki zaman: {now.strftime('%H:%M:%S')} - Hedef zaman: 03:50")
+            logging.info(f"Zamanlayıcı aktif - Şu anki zaman: {now.strftime('%H:%M:%S')} - Hedef zaman: 03:40")
         
-        # Her gün 03:50'de çalıştır
-        if now.hour == 3 and now.minute == 50:
+        # Her gün 03:40'da çalıştır
+        if now.hour == 3 and now.minute == 40:
             logging.info("Zaman geldi! Otomatik içerik üretimi tetikleniyor...")
             # Ana görevi ayrı bir thread'de başlat ki ana döngüyü bloklamasın
             trigger_thread = threading.Thread(target=trigger_daily_content_generation)
