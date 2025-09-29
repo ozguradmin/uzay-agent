@@ -574,7 +574,9 @@ def ensure_tag_ids(tag_names: list) -> list:
     credentials = f"{wp_user}:{wp_password}"
     token = base64.b64encode(credentials.encode())
     headers = {
-        'Authorization': f'Basic {token.decode("utf-8")}'
+        'Authorization': f'Basic {token.decode("utf-8")}',
+        'Accept': 'application/json',
+        'User-Agent': 'UzayAgent/1.0 (+https://galaktikuzay.com)'
     }
 
     try:
@@ -593,8 +595,30 @@ def ensure_tag_ids(tag_names: list) -> list:
     except requests.exceptions.RequestException as e:
         body = e.response.text if getattr(e, 'response', None) is not None else 'Yanıt yok'
         status = e.response.status_code if getattr(e, 'response', None) is not None else 'N/A'
-        logging.error(f"[MEDIA] WordPress'e yükleme HATASI: http_status={status}, detay={body}")
-        return None
+        logging.error(f"[MEDIA] Multipart yükleme HATASI: http_status={status}, detay={body}")
+        # Fallback: raw body ile upload (bazı kurulumlar multipart'ı engeller)
+        try:
+            alt_headers = {
+                'Authorization': headers['Authorization'],
+                'Accept': 'application/json',
+                'Content-Type': 'image/jpeg',
+                'Content-Disposition': f'attachment; filename="{image_name or 'image.jpg'}"',
+                'User-Agent': headers['User-Agent']
+            }
+            logging.info("[MEDIA] Fallback upload (binary body) deneniyor...")
+            upload_response = requests.post(media_api_url, headers=alt_headers, data=optimized_image_data, timeout=60)
+            upload_response.raise_for_status()
+            media_data = upload_response.json()
+            logging.info(f"[MEDIA] Fallback ile görsel yüklendi. Media ID: {media_data.get('id')}, source_url: {media_data.get('source_url')}")
+            return {
+                "id": media_data['id'],
+                "url": media_data['source_url']
+            }
+        except requests.exceptions.RequestException as e2:
+            body2 = e2.response.text if getattr(e2, 'response', None) is not None else 'Yanıt yok'
+            status2 = e2.response.status_code if getattr(e2, 'response', None) is not None else 'N/A'
+            logging.error(f"[MEDIA] Fallback upload da HATA: http_status={status2}, detay={body2}")
+            return None
 
 def get_nasa_apod():
     """
