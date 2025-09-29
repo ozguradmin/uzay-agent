@@ -3,24 +3,17 @@ from dotenv import load_dotenv
 import os
 import requests
 import base64
-from flask import request
-from googleapiclient.discovery import build
 from datetime import datetime, timedelta
 import pytz
 import re
 from PIL import Image
 from io import BytesIO
-from google.oauth2 import service_account
-from google.auth.transport.requests import Request
-import google.auth
-import google.auth.transport.requests
 import threading
 import time
 import logging
 import random
-import dateutil.parser
 import json
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse
 
 # .env dosyasındaki ortam değişkenlerini yükle
 load_dotenv()
@@ -139,23 +132,23 @@ def resolve_redirect_url(url: str):
 
 def is_article_like_url(url: str) -> bool:
     """
-    K�k ana sayfa/konu etiket sayfalar�n� ele ve muhabir sayfalar�n� ele. Makale format�na benzer URL'leri tut.
-    Basit sezgisel: path uzun ve en az bir '-' veya rakam i�ersin; domain anasayfas� olmas�n.
+    Kök ana sayfa/konu etiket sayfalarını ele ve muhabir sayfalarını ele. Makale formatına benzer URL'leri tut.
+    Basit sezgisel: path uzun ve en az bir '-' veya rakam içersin; domain anasayfası olmasın.
     """
     try:
         parsed = urlparse(url)
         if not parsed.scheme or not parsed.netloc:
             return False
         path = parsed.path or "/"
-        # Anasayfa veya tek segment k�sa yol sayfalar� ele
+        # Anasayfa veya tek segment kısa yol sayfaları ele
         if path == "/" or len([p for p in path.split('/') if p]) < 1:
             return False
         # Sadece konu indexleri ("/topic/astronomy" gibi) ve genel dizinleri ele
         if any(seg in path.lower() for seg in ["/tag/", "/topic/", "/category/", "/news/", "/space/"]):
-            # e�er detay segmenti yoksa ele
+            # eğer detay segmenti yoksa ele
             if len([p for p in path.split('/') if p]) <= 2:
                 return False
-        # URL i�inde tarih veya ay�r�c� varl��� bir ipucu
+        # URL içinde tarih veya ayırıcı varlığı bir ipucu
         if any(ch.isdigit() for ch in path) or '-' in path:
             return True
         return False
@@ -164,9 +157,9 @@ def is_article_like_url(url: str) -> bool:
 
 def is_recent_url(url: str, hours: int = 48) -> bool:
     """
-    Yay�n tarihine eri�emedi�imiz sitelerde URL deseninden kaba bir filtre uygular.
-    Tercihen i�inde y�l (2025) ve ay/g�n desenleri ("/09/", "-2025-09-") arar.
-    Aksi halde bilinen g�ncel kaynak alan adlar� i�in izin verir.
+    Yayın tarihine erişemediğimiz sitelerde URL deseninden kaba bir filtre uygular.
+    Tercihen içinde yıl (2025) ve ay/gün desenleri ("/09/", "-2025-09-") arar.
+    Aksi halde bilinen güncel kaynak alan adları için izin verir.
     """
     try:
         parsed = urlparse(url)
@@ -177,14 +170,14 @@ def is_recent_url(url: str, hours: int = 48) -> bool:
             'vertexaisearch.cloud.google.com', 'dailymotion.com', 'youtube.com', 'youtu.be'
         ]):
             return False
-        # Y�l ve ay i�eren URL'leri �ncelikle kabul et
+        # Yıl ve ay içeren URL'leri öncelikle kabul et
         current_year = datetime.now().year
         if str(current_year) in path and any(f"/{m:02d}/" in path or f"-{current_year}-{m:02d}-" in path for m in range(1,13)):
             return True
-        # Baz� siteler "today/live" sayfalar� kullan�r; izin ver
+        # Bazı siteler "today/live" sayfaları kullanır; izin ver
         if any(kw in path for kw in ["live", "today", "breaking", "latest"]):
             return True
-        # Uzay hava durumu ve f�rlatma ajandalar� ger�ek zamanl� olabilir
+        # Uzay hava durumu ve fırlatma ajandaları gerçek zamanlı olabilir
         if any(domain in host for domain in [
             'spaceflightnow.com', 'rocketlaunch.org', 'spaceweatherlive.com', 'spaceweather.gov', 'swpc.noaa.gov', 'metoffice.gov.uk'
         ]):
@@ -248,7 +241,7 @@ def search_google(query: str, num_results: int = 10):
         
         found_items = data.get("items", [])
 
-        # URL'leri temizle ve standartlatr
+        # URL'leri temizle ve standartlaştır
         cleaned_items = []
         for item in found_items:
             original_link = item.get('link')
@@ -256,7 +249,7 @@ def search_google(query: str, num_results: int = 10):
                 item['link'] = resolve_redirect_url(original_link)
             cleaned_items.append(item)
 
-        # Makale benzeri ve gcncel URL'leri filtrele
+        # Makale benzeri ve güncel URL'leri filtrele
         filtered_items = []
         for it in cleaned_items:
             link = it.get('link') or ''
@@ -414,7 +407,7 @@ def markdown_to_html_links(text):
     """Metin içindeki Markdown link formatını [text](url) HTML <a> etiketine dönüştürür."""
     return re.sub(r'\[(.*?)\]\((.*?)\)', r'<a href="\2">\1</a>', text)
 
-def build_wordpress_content(title, main_content_parts, focus_keyword, nasa_image_url=None, nasa_image_id=None, ai_image_url=None, ai_image_id=None, sources=None, ai_image2_url=None, ai_image2_id=None):
+def build_wordpress_content(title, main_content_parts, focus_keyword, nas-image_url=None, nas-image_id=None, ai_image_url=None, ai_image_id=None, sources=None, ai_image2_url=None, ai_image2_id=None):
     """
     Verilen yapılandırılmış veri parçalarından WordPress blok düzenleyici formatında tam bir HTML içeriği oluşturur.
     Görsel bloklarına odak anahtar kelimesini alt metin olarak ekler.
@@ -424,9 +417,9 @@ def build_wordpress_content(title, main_content_parts, focus_keyword, nasa_image
     content_html = f'<!-- wp:quote -->\n<blockquote class="wp-block-quote"><!-- wp:heading {{"level":3}} -->\n<h3 class="wp-block-heading"><strong>{title}</strong></h3>\n<!-- /wp:heading --></blockquote>\n<!-- /wp:quote -->\n\n'
     
     # 2. NASA Görseli (varsa)
-    if nasa_image_url and nasa_image_id:
-        nasa_image_block = f'<!-- wp:image {{"id":{nasa_image_id},"sizeSlug":"large","style":{{"border":{{"radius":"10px"}}}}}} -->\n<figure class="wp-block-image size-large has-custom-border"><img src="{nasa_image_url}" alt="{focus_keyword}" class="wp-image-{nasa_image_id}" style="border-radius:10px"/></figure>\n<!-- /wp:image -->\n\n'
-        content_html += nasa_image_block
+    if nas-image_url and nas-image_id:
+        nas-image_block = f'<!-- wp:image {{"id":{nas-image_id},"sizeSlug":"large","style":{{"border":{{"radius":"10px"}}}}}} -->\n<figure class="wp-block-image size-large has-custom-border"><img src="{nas-image_url}" alt="{focus_keyword}" class="wp-image-{nas-image_id}" style="border-radius:10px"/></figure>\n<!-- /wp:image -->\n\n'
+        content_html += nas-image_block
 
     # 3. Ana İçerik Blokları ve AI Görselleri
     ai_image1_inserted = False
@@ -499,44 +492,6 @@ def upload_image_to_wordpress(title: str, image_url: str = None, image_data: byt
         logging.error("Yüklenecek görsel verisi bulunamadı.")
         return None
 
-
-def ensure_tag_ids(tag_names: list) -> list:
-    """
-    Verilen etiket isimlerini WordPress'te ID'lere çözümler. Yoksa oluşturur.
-    """
-    if not tag_names:
-        return []
-
-    wp_url = os.getenv("WORDPRESS_URL")
-    wp_user = os.getenv("WORDPRESS_USER")
-    wp_password = os.getenv("WORDPRESS_APP_PASSWORD")
-
-    credentials = f"{wp_user}:{wp_password}"
-    token = base64.b64encode(credentials.encode()).decode("utf-8")
-    headers = { 'Authorization': f'Basic {token}', 'Content-Type': 'application/json' }
-
-    tag_ids = []
-    for name in tag_names:
-        name = name.strip()
-        if not name:
-            continue
-        try:
-            # Önce mevcut etiketi ara
-            search_url = f"{wp_url.rstrip('/')}/wp-json/wp/v2/tags"
-            resp = requests.get(search_url, headers=headers, params={"search": name, "per_page": 100}, timeout=20)
-            resp.raise_for_status()
-            matches = [t for t in resp.json() if t.get('name', '').lower() == name.lower()]
-            if matches:
-                tag_ids.append(matches[0]['id'])
-                continue
-            # Yoksa oluştur
-            create_resp = requests.post(search_url, headers=headers, json={"name": name}, timeout=20)
-            create_resp.raise_for_status()
-            tag_ids.append(create_resp.json()['id'])
-        except Exception as e:
-            logging.warning(f"Etiket oluşturma/arama hatası ('{name}'): {e}")
-    return tag_ids
-
     # Pillow ile görsel optimizasyonu
     try:
         img = Image.open(BytesIO(image_content))
@@ -599,7 +554,7 @@ def get_nasa_apod():
         logging.error(f"NASA APOD API'sine bağlanırken hata oluştu: {e}")
         return None
 
-def post_to_wordpress(title: str, content: str, featured_media_id: int = None, meta_description: str = None, schedule_time: str = None, 
+def post_to_wordpress(title: str, content: str, featured_medi-id: int = None, meta_description: str = None, schedule_time: str = None, 
                      meta_title: str = None, tags: list = None, category_id: int = None, slug: str = None, focus_keyword: str = None):
     """
     Verilen başlık ve içerikle WordPress'e SEO optimize edilmiş bir yazı gönderir.
@@ -628,8 +583,8 @@ def post_to_wordpress(title: str, content: str, featured_media_id: int = None, m
     }
     
     # Featured Image
-    if featured_media_id:
-        post_data["featured_media"] = featured_media_id
+    if featured_medi-id:
+        post_data["featured_media"] = featured_medi-id
     
     # Kategori
     if category_id:
@@ -659,37 +614,52 @@ def post_to_wordpress(title: str, content: str, featured_media_id: int = None, m
     if schedule_time:
         post_data["date"] = schedule_time
     
-    # 4. Adım: Tamamen formatlanmış içeriği oluştur
-    final_content = build_wordpress_content(
-        title=title,
-        main_content_parts=main_content_parts,
-        focus_keyword=focus_keyword,
-        nasa_image_url=None,
-        nasa_image_id=None,
-        ai_image_url=ai_media1_url,
-        ai_image_id=ai_media1_id,
-        sources=kaynaklar,
-        ai_image2_url=ai_media2_url,
-        ai_image2_id=ai_media2_id
-    )
+    response = requests.post(api_url, headers=headers, json=post_data, timeout=30)
+    try:
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        logging.error(f"WordPress post hatası: {e}")
+        logging.error(f"WP Yanıtı: {response.status_code} - {response.text}")
+        raise
+    return response.json()
 
-    # 5. Adım: WordPress'e gönder
-    logging.info(f"'{title}' başlıklı yazı WordPress'e gönderiliyor...")
-    post_details = post_to_wordpress(
-        title=title,
-        content=final_content,
-        featured_media_id=featured_media_id_to_use,
-        meta_description=meta_aciklama,
-        meta_title=meta_baslik,
-        meta_keywords=meta_keywords,
-        tags=[tag.strip() for tag in etiketler.split(',') if tag.strip()] if etiketler else [],
-        schedule_time=schedule_time,
-        slug=slug,
-        focus_keyword=focus_keyword
-    )
-    logging.info(f"BAŞARILI: Google içerik gönderildi. Post ID: {post_details.get('id')}, featured_media_id: {featured_media_id_to_use}")
 
-    return True # Başarılı olduğunu belirtmek için True döndür
+def ensure_tag_ids(tag_names: list) -> list:
+    """
+    Verilen etiket isimlerini WordPress'te ID'lere çözümler. Yoksa oluşturur.
+    """
+    if not tag_names:
+        return []
+
+    wp_url = os.getenv("WORDPRESS_URL")
+    wp_user = os.getenv("WORDPRESS_USER")
+    wp_password = os.getenv("WORDPRESS_APP_PASSWORD")
+
+    credentials = f"{wp_user}:{wp_password}"
+    token = base64.b64encode(credentials.encode()).decode("utf-8")
+    headers = { 'Authorization': f'Basic {token}', 'Content-Type': 'application/json' }
+
+    tag_ids = []
+    for name in tag_names:
+        name = name.strip()
+        if not name:
+            continue
+        try:
+            # Önce mevcut etiketi ara
+            search_url = f"{wp_url.rstrip('/')}/wp-json/wp/v2/tags"
+            resp = requests.get(search_url, headers=headers, params={"search": name, "per_page": 100}, timeout=20)
+            resp.raise_for_status()
+            matches = [t for t in resp.json() if t.get('name', '').lower() == name.lower()]
+            if matches:
+                tag_ids.append(matches[0]['id'])
+                continue
+            # Yoksa oluştur
+            create_resp = requests.post(search_url, headers=headers, json={"name": name}, timeout=20)
+            create_resp.raise_for_status()
+            tag_ids.append(create_resp.json()['id'])
+        except Exception as e:
+            logging.warning(f"Etiket oluşturma/arama hatası ('{name}'): {e}")
+    return tag_ids
 
 
 def get_smart_schedule_times():
@@ -758,23 +728,26 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
         {sources_text}
 
         **KESİN KURALLAR:**
-        1.  **SEO Başlığı:** 65 karakteri geçmeyen, merak uyandıran, spesifik ve ilgi çekici bir Türkçe başlık üret. 
+        1.  **Odak Anahtar Kelime:** Konuyu en iyi özetleyen 2-4 kelimelik bir anahtar kelime öbeği. Örneğin "James Webb Satürn", "Kara Delik Enerji".
+        2.  **SEO Başlığı:** 65 karakteri geçmeyen, merak uyandıran, spesifik ve ilgi çekici bir Türkçe başlık üret. 
+            Odak anahtar kelime SEO başlığının başında veya ilk kelimelerinde geçmeli.
             Örnekler: "Mars'ta Yaşam İzi Bulundu!", "Jüpiter'in Büyük Kırmızı Lekesi Küçülüyor", "Uzayda Su Bulundu!", "Kara Delik Yıldızı Yuttu", "Ay'dan İlk Örnekler Geldi"
             Genel ifadeler kullanma: "NASA Açıkladı", "Bilim Haberi", "Harika bir görev", "Kozmik" gibi.
             Başlık doğrudan konuyu anlatsın, yapay zeka hissi vermesin.
-        2.  **Meta Başlık:** 60 karakteri geçmeyen, SEO optimize edilmiş meta başlık (title tag).
-        3.  **Meta Açıklama:** 160 karakteri geçmeyen, anahtar kelimeleri içeren bir meta açıklama yaz.
-        4.  **Meta Anahtar Kelimeler:** Virgülle ayrılmış 5-8 adet anahtar kelime (örnek: "uzay, astronomi, NASA, keşif, bilim").
+        3.  **URL Kısa İsmi (Slug):** SEO başlığından türetilmiş, Türkçe karakter içermeyen, küçük harfli ve kelimeler arası tire ile ayrılmış kısa bir URL ismi. Odak anahtar kelimeyi içermeli.
+            Örnek: "mars-yuzeyindeki-yasam-izi", "kara-delik-yildizi-yuttu".
+        4.  **Meta Açıklama:** 160 karakteri geçmeyen, odak anahtar kelimeyi içeren ve merak uyandıran bir meta açıklama yaz.
         5.  **Etiketler:** Virgülle ayrılmış 3-5 adet etiket (örnek: "Uzay Keşfi, Astronomi, Bilim Haberleri").
         6.  **Yazı Başlığı (H3):** İçerikte gösterilecek, daha sanatsal ve uzun bir başlık üret.
-        4.  **İçerik Akışı:**
+        7.  **İçerik Akışı:**
             *   YUKARIDAKİ KONUYU temel alarak, en az 400 kelimelik özgün bir metin oluştur.
             *   Metni `[H2]` etiketleriyle mantıksal alt başlıklara ayır.
             *   Her alt başlığın altına `[P]` etiketleriyle paragraflar ekle.
-            *   Metin içinde `[Site Adı](URL)` gibi en az iki adet Markdown formatında dış link ver.
+            *   İlk paragrafta odak anahtar kelimeyi kullan.
+            *   Metin içinde en az iki adet Markdown formatında dahili link ver. Dahili linkler "https://galaktikuzay.com/kategori/ilginc-bilgiler/" veya "https://galaktikuzay.com/kategori/haberler/" gibi kategorilere veya mevcut bir yazıya gidebilir.
             *   Metne kişisel bir dokunuş kat.
             *   NASA APOD verilerini kullanma - sadece verilen konuya odaklan.
-        5.  **Kaynaklar:** Link verdiğin kaynakları "Kaynaklar" bölümü için listele. SADECE YUKARIDA VERİLEN KAYNAKLARI KULLAN. ASLA SOSYAL MEDYA (INSTAGRAM, TWITTER VB.) LİNKİ VERME.
+        8.  **Kaynaklar:** Link verdiğin kaynakları "Kaynaklar" bölümü için listele. SADECE YUKARIDA VERİLEN KAYNAKLARI KULLAN. ASLA SOSYAL MEDYA (INSTAGRAM, TWITTER VB.) LİNKİ VERME.
         
         **ÇIKTI FORMATI (DEĞİŞTİRME):**
         [ODAK ANAHTAR KELİME]
@@ -842,7 +815,7 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
         ai_media1_id = None
         ai_media2_url = None
         ai_media2_id = None
-        featured_media_id_to_use = None # Öne çıkarılacak görseli belirlemek için
+        featured_medi-id_to_use = None # Öne çıkarılacak görseli belirlemek için
         
         # İlk görsel
         ai_image1_data = generate_ai_image(ai_image1_prompt)
@@ -855,7 +828,7 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
             if ai_media1_info and ai_media1_info.get('url'):
                 ai_media1_url = ai_media1_info.get('url')
                 ai_media1_id = ai_media1_info.get('id')
-                featured_media_id_to_use = ai_media1_id # İlk görseli öne çıkan yap
+                featured_medi-id_to_use = ai_media1_id # İlk görseli öne çıkan yap
             else:
                 logging.warning("İlk AI görseli WordPress'e yüklenemedi. (upload başarısız)")
         
@@ -871,12 +844,12 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
                 ai_media2_url = ai_media2_info.get('url')
                 ai_media2_id = ai_media2_info.get('id')
                 # Eğer ilk görsel başarısız olduysa, ikinciyi öne çıkan yap
-                if not featured_media_id_to_use:
-                    featured_media_id_to_use = ai_media2_id
+                if not featured_medi-id_to_use:
+                    featured_medi-id_to_use = ai_media2_id
             else:
                 logging.warning("İkinci AI görseli WordPress'e yüklenemedi. (upload başarısız)")
 
-        if not featured_media_id_to_use:
+        if not featured_medi-id_to_use:
             logging.warning(f"'{seo_baslik}' konusu için kullanılabilir AI görseli bulunamadı veya yüklenemedi. Yazı görsel olmadan yayınlanacak.")
 
         # 4. Adım: Tamamen formatlanmış içeriği oluştur
@@ -884,8 +857,8 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
             title=yazi_basligi,
             main_content_parts=main_content_parts,
             focus_keyword=focus_keyword,
-            nasa_image_url=None,  # Bu endpoint'te NASA görseli yok
-            nasa_image_id=None,
+            nas-image_url=None,  # Bu endpoint'te NASA görseli yok
+            nas-image_id=None,
             ai_image_url=ai_media1_url,
             ai_image_id=ai_media1_id,
             sources=kaynaklar,
@@ -898,7 +871,7 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
         post_details = post_to_wordpress(
             title=seo_baslik,
             content=final_content,
-            featured_media_id=featured_media_id_to_use,
+            featured_medi-id=featured_medi-id_to_use,
             meta_description=meta_aciklama,
             meta_title=seo_baslik,  # Meta başlık, SEO başlığı ile aynı olabilir
             tags=[tag.strip() for tag in etiketler.split(',') if tag.strip()] if etiketler else [],
@@ -906,7 +879,7 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
             slug=slug,
             focus_keyword=focus_keyword
         )
-        logging.info(f"BAŞARILI: Google içerik gönderildi. Post ID: {post_details.get('id')}, featured_media_id: {featured_media_id_to_use}")
+        logging.info(f"BAŞARILI: Google içerik gönderildi. Post ID: {post_details.get('id')}, featured_medi-id: {featured_medi-id_to_use}")
 
         return True # Başarılı olduğunu belirtmek için True döndür
 
@@ -955,7 +928,7 @@ def post_nasa_apod_logic(schedule_time: str = None):
         logging.info("NASA APOD verisi çekiliyor...")
         apod_data = get_nasa_apod()
         if not apod_data or 'url' not in apod_data:
-            logging.error("NASA'dan APOD verisi alınamadı.")
+            logging.error("NASA'dan APOD verisi alınamadı veya URL içermiyor.")
             return None
 
         # APOD verisinin bugüne ait ve bir görsel olup olmadığını kontrol et
@@ -964,11 +937,11 @@ def post_nasa_apod_logic(schedule_time: str = None):
         media_type = apod_data.get("media_type")
 
         if apod_date != today_date_str:
-            logging.warning(f"Bugünün APOD içeriği mevcut değil. Gelen tarih: {apod_date}, Beklenen tarih: {today_date_str}. İşlem atlandı.")
+            logging.error(f"!!! HATA: Bugünün APOD içeriği mevcut değil. Gelen tarih: {apod_date}, Beklenen tarih: {today_date_str}. İşlem atlandı.")
             return None
-
+        
         if media_type != "image":
-            logging.warning(f"Bugünün APOD içeriği bir görsel değil, bir '{media_type}'. İşlem atlandı.")
+            logging.error(f"!!! HATA: Bugünün APOD içeriği bir görsel değil, bir '{media_type}'. İşlem atlandı.")
             return None
             
         # 2. Adım: İçeriği Gemini ile zenginleştir
@@ -978,25 +951,31 @@ def post_nasa_apod_logic(schedule_time: str = None):
         ingilizce_aciklama = apod_data.get('explanation', 'Açıklama Yok')
 
         prompt = f"""
-        Sen, galaktikuzay.com için yazan, Neil deGrasse Tyson gibi karmaşık konuları basit ve heyecan verici bir dille anlatan bir bilim iletişimcisisin. Görevin, sana verilen NASA verilerini analiz edip, SEO uyumlu, yapılandırılmış bir blog yazısı verisi oluşturmak.
+        Sen, galaktikuzay.com için yazan, Neil deGrasse Tyson gibi karmaşık konuları basit ve heyecan verici bir dille anlatan bir bilim iletişimçisisin. Görevin, sana verilen NASA verilerini analiz edip, SEO uyumlu, yapılandırılmış bir blog yazısı verisi oluşturmak.
 
         **VERİLEN NASA BİLGİLERİ:**
         - Başlık: {ingilizce_baslik}
         - Açıklama: {ingilizce_aciklama}
 
         **KESİN KURALLAR:**
-        1.  **SEO Başlığı:** 65 karakteri geçmeyen, merak uyandıran ve SADECE fotoğrafın konusunu açıklayan bir Türkçe başlık üret. 
+        1.  **Odak Anahtar Kelime:** Konuyu en iyi özetleyen 2-4 kelimelik bir anahtar kelime öbeği. Örneğin "James Webb Satürn", "Kara Delik Enerji".
+        2.  **SEO Başlığı:** 65 karakteri geçmeyen, merak uyandıran ve SADECE fotoğrafın konusunu açıklayan bir Türkçe başlık üret. 
+            Odak anahtar kelime SEO başlığının başında veya ilk kelimelerinde geçmeli.
             KESİNLİKLE YORUM EKLEME. "Harika bir görev", "Kozmik", "İşte analizim" gibi ifadeler KULLANMA. Sadece başlık olsun.
             Örnekler: "Mars Yüzeyindeki Gizemli Delik", "Perseverance'dan Yeni Görüntü", "Andromeda Galaksisi'nin Net Fotoğrafı"
-        2.  **Meta Açıklama:** 160 karakteri geçmeyen, anahtar kelimeleri içeren bir meta açıklama yaz.
-        3.  **Yazı Başlığı (H3):** İçerikte gösterilecek, daha sanatsal ve uzun bir başlık üret.
-        4.  **İçerik Akışı:**
+        3.  **URL Kısa İsmi (Slug):** SEO başlığından türetilmiş, Türkçe karakter içermeyen, küçük harfli ve kelimeler arası tire ile ayrılmış kısa bir URL ismi. Odak anahtar kelimeyi içermeli.
+            Örnek: "mars-yuzeyindeki-yasam-izi", "kara-delik-yildizi-yuttu".
+        4.  **Meta Açıklama:** 160 karakteri geçmeyen, odak anahtar kelimeyi içeren bir meta açıklama yaz.
+        5.  **Etiketler:** Virgülle ayrılmış 3-5 adet etiket (örnek: "Uzay Keşfi, Astronomi, Bilim Haberleri").
+        6.  **Yazı Başlığı (H3):** İçerikte gösterilecek, daha sanatsal ve uzun bir başlık üret.
+        7.  **İçerik Akışı:**
             *   İngilizce açıklamayı temel alarak, en az 400 kelimelik özgün bir metin oluştur.
             *   Metni `[H2]` etiketleriyle mantıksal alt başlıklara ayır.
             *   Her alt başlığın altına `[P]` etiketleriyle paragraflar ekle.
-            *   Metin içinde `[Perseverance Gezgini](https://mars.nasa.gov/mars2020/)` gibi en az iki adet Markdown formatında dış link ver.
+            *   İlk paragrafta odak anahtar kelimeyi kullan.
+            *   Metin içinde en az iki adet Markdown formatında dahili link ver. Dahili linkler "https://galaktikuzay.com/kategori/haberler/" veya "https://galaktikuzay.com/kategori/bilim-teknoloji/" gibi kategorilere veya mevcut bir yazıya gidebilir.
             *   Metne kişisel bir dokunuş kat.
-        5.  **Kaynaklar:** Link verdiğin kaynakları ve ek olarak ana NASA APOD sayfasını (`[NASA APOD](https://apod.nasa.gov/apod/)`) "Kaynaklar" bölümü için listele.
+        8.  **Kaynaklar:** Link verdiğin kaynakları ve ek olarak ana NASA APOD sayfasını (`[NASA APOD](https://apod.nasa.gov/apod/)`) "Kaynaklar" bölümü için listele.
         
         **ÇIKTI FORMATI (DEĞİŞTİRME):**
         [ODAK ANAHTAR KELİME]
@@ -1052,61 +1031,40 @@ def post_nasa_apod_logic(schedule_time: str = None):
 
             kaynaklar = [line.strip() for line in parts[7].replace('[KAYNAKLAR]', '').strip().split('\n') if line.strip()] if len(parts) > 7 else []
 
-        except (IndexError, ValueError):
-            logging.error("Gemini'den gelen yanıt beklenilen formatta değil. Ayraçlar eksik olabilir.")
-            return jsonify({"error": "Gemini'den gelen yanıt beklenilen formatta değil. Ayraçlar eksik olabilir."}), 500
+        except (IndexError, ValueError) as e:
+            logging.error(f"Gemini'den gelen yanıt APOD için beklenilen formatta değil. Ayraçlar eksik olabilir. Hata: {e}")
+            logging.error(f"Ham Gemini yanıtı: {gemini_response}")
+            # Eğer içerik boş geldiyse, NASA açıklamasından minimal içerik üret (fallback)
+            if not main_content_parts:
+                logging.warning("APOD için Gemini içerik bloğu boş geldi. NASA açıklamasından içerik oluşturuluyor (fallback).")
+                main_content_parts = [
+                    ('h2', 'Fotoğrafın Bilimsel Bağlamı'),
+                    ('p', ingilizce_aciklama[:900])
+                ]
+            focus_keyword = ingilizce_baslik.replace("'", "").replace('"', '').strip() # Basit bir fallback odak anahtar kelime
+            slug = re.sub(r'[^a-z0-9]+', '-', focus_keyword.lower()).strip('-') # Basit bir fallback slug
+            seo_baslik = f"Günün Astronomi Fotoğrafı: {ingilizce_baslik}"
+            meta_aciklama = ingilizce_aciklama[:150]
+            etiketler = "astronomi, uzay, fotoğraf, nasa"
+            yazi_basligi = ingilizce_baslik
 
-        # 3. Adım: Görseli WordPress'e yükle
-        logging.info(f"'{seo_baslik}' başlıklı görsel WordPress'e yükleniyor...")
-        # hdurl yoksa url anahtarını dene
-        image_source_url = apod_data.get('hdurl') or apod_data.get('url')
-        logging.info(f"APOD görsel kaynağı seçildi: {'hdurl' if apod_data.get('hdurl') else 'url'} -> {image_source_url}")
-        media_info = upload_image_to_wordpress(title=seo_baslik, image_url=image_source_url)
-        if not media_info:
-            logging.error("NASA görseli WordPress'e yüklenemedi.")
-            return jsonify({"error": "NASA görseli WordPress'e yüklenemedi."}), 500
-        
-        media_id = media_info['id']
-        media_url = media_info['url']
-
-        # 4. Adım: AI ile ek görsel üret
-        ai_image_prompt = f"Bilimsel illüstrasyon, fotogerçekçi: {yazi_basligi}. Asla canlı hayvan veya leopar deseni çizme. Sadece Mars gezegeni, uzay ve jeolojik kaya oluşumları teması."
-        ai_image_data = generate_ai_image(ai_image_prompt)
-        ai_media_url = None
-        ai_media_id = None
-        if ai_image_data:
-            logging.info("Üretilen AI görseli WordPress'e yükleniyor...")
-            ai_media_info = upload_image_to_wordpress(
-                title=f"{seo_baslik} - Yapay Zeka Yorumu", 
-                image_data=ai_image_data
-            )
-            if ai_media_info and ai_media_info.get('url'):
-                ai_media_url = ai_media_info.get('url')
-                ai_media_id = ai_media_info.get('id')
-
-        # Eğer içerik boş geldiyse, NASA açıklamasından minimal içerik üret (fallback)
-        if not main_content_parts:
-            logging.warning("APOD için Gemini içerik bloğu boş geldi. NASA açıklamasından içerik oluşturuluyor (fallback).")
-            main_content_parts = [
-                ('h2', 'Fotoğrafın Bilimsel Bağlamı'),
-                ('p', ingilizce_aciklama[:900])
-            ]
 
         # 5. Adım: Tamamen formatlanmış içeriği oluştur
         final_content = build_wordpress_content(
             title=yazi_basligi,
             main_content_parts=main_content_parts,
             focus_keyword=focus_keyword,
-            nasa_image_url=media_url,
-            nasa_image_id=media_id,
-            ai_image_url=ai_media_url,
-            ai_image_id=ai_media_id,
+            nas-image_url=image_source_url,
+            nas-image_id=medi-id,
+            ai_image_url=None,  # APOD için AI görseli üretmiyoruz
+            ai_image_id=None,
             sources=kaynaklar
         )
         
         # Telif hakkı bilgisini ekleyelim, eğer varsa
         copyright_info = f"Görsel Sahibi: {apod_data['copyright']}" if 'copyright' in apod_data else ""
-        final_content += f"\n\n<!-- wp:paragraph -->\n<p><em>{copyright_info}</em></p>\n<!-- /wp:paragraph -->"
+        if copyright_info:
+            final_content += f"\n\n<!-- wp:paragraph -->\n<p><em>{copyright_info}</em></p>\n<!-- /wp:paragraph -->"
 
         # 6. Adım: Yazıyı WordPress'e gönder
         today_date = datetime.now().strftime("%d.%m.%Y")
@@ -1117,7 +1075,7 @@ def post_nasa_apod_logic(schedule_time: str = None):
         post_details = post_to_wordpress(
             title=final_title,
             content=final_content,
-            featured_media_id=media_id,
+            featured_medi-id=medi-id,
             meta_description=meta_aciklama,
             schedule_time=schedule_time,
             meta_title=final_title,
@@ -1125,7 +1083,7 @@ def post_nasa_apod_logic(schedule_time: str = None):
             slug=final_slug,
             focus_keyword=focus_keyword
         )
-        logging.info(f"BAŞARILI: NASA APOD içeriği gönderildi. Post ID: {post_details.get('id')}, featured_media_id: {media_id}")
+        logging.info(f"BAŞARILI: NASA APOD içeriği gönderildi. Post ID: {post_details.get('id')}, featured_medi-id: {medi-id}")
         return True # Başarılı olduğunu belirtmek için True döndür
     
     except ValueError as e:
@@ -1135,7 +1093,7 @@ def post_nasa_apod_logic(schedule_time: str = None):
         logging.error(f"İşlem sırasında beklenmedik bir hata oluştu: {e}")
         return None
     finally:
-    logging.info("[LOG] post_nasa_apod_logic BİTTİ")
+        logging.info("[LOG] post_nasa_apod_logic BİTTİ")
 
 
 def get_wordpress_posts(limit=100):
@@ -1238,26 +1196,9 @@ def discover_trending_topics():
             news_items_text = "\n".join([f"- {item.get('title', '')}: {item.get('link', '')}" for item in all_results])
             logging.info(f"Gemini'ye gönderilen ham arama sonuçları:\n{news_items_text}")
 
-            criteria = """Seçim kriterleri:
-            1. Türkçe okuyucular için anlaşılır olmalı
-            2. Görsel içerik üretilebilir olmalı
-            3. SEO dostu olmalı
-            4. Viral potansiyeli olmalı
-            5. BİRBİRİNDEN TAMAMEN FARKLI KONULAR OLMALI - Aynı gezegen, aynı konu olmasın
-            6. NASA APOD'dan FARKLI olmalı - Mars keşifleri, Perseverance, Curiosity gibi NASA APOD konuları seçme
-            7. Çeşitlilik: Jüpiter, Satürn, kara delik, yıldız, galaksi, uzay teknolojisi, meteor yağmurları, exoplanet gibi farklı alanlar
-            8. EN ÖNEMLİ KURAL: Konular KESİNLİKLE son 24 saat içindeki gelişmelere dayanmalıdır. 'on this day' gibi tarihi olaylar veya eski haberler KESİNLİKLE YASAKTIR."""
+            criteria = """Seçim kriterleri:\n            1. Türkçe okuyucular için anlaşılır olmalı\n            2. Görsel içerik üretilebilir olmalı\n            3. SEO dostu olmalı\n            4. Viral potansiyeli olmalı\n            5. BİRBİRİNDEN TAMAMEN FARKLI KONULAR OLMALI - Aynı gezegen, aynı konu olmasın\n            6. NASA APOD'dan FARKLI olmalı - Mars keşifleri, Perseverance, Curiosity gibi NASA APOD konuları seçme\n            7. Çeşitlilik: Jüpiter, Satürn, kara delik, yıldız, galaksi, uzay teknolojisi, meteor yağmurları, exoplanet gibi farklı alanlar\n            8. EN ÖNEMLİ KURAL: Konular KESİNLİKLE son 24 saat içindeki gelişmelere dayanmalıdır. 'on this day' gibi tarihi olaylar veya eski haberler KESİNLİKLE YASAKTIR."""
 
-            topics_prompt = f"""Sen bir uzay ve astronomi içerik editörüsün. Aşağıdaki güncel haberleri analiz et ve galaktikuzay.com için en ilgi çekici 3 konuyu seç.
-            
-ÖNEMLİ: Bu konular NASA APOD'dan TAMAMEN FARKLI olmalı. NASA APOD zaten günlük astronomi fotoğrafı için kullanılıyor.
-            
-{criteria}
-            
-            Haberler:
-{news_items_text}
-            
-Sadece konu başlıklarını, her satırda bir tane olacak şekilde listele. Açıklama ekleme."""
+            topics_prompt = f"""Sen bir uzay ve astronomi içerik editörüsün. Aşağıdaki güncel haberleri analiz et ve galaktikuzay.com için en ilgi çekici 3 konuyu seç.\n            \nÖNEMLİ: Bu konular NASA APOD'dan TAMAMEN FARKLI olmalı. NASA APOD zaten günlük astronomi fotoğrafı için kullanılıyor.\n            \n{criteria}\n            \nHaberler:\n{news_items_text}\n            \nSadece konu başlıklarını, her satırda bir tane olacak şekilde listele. Açıklama ekleme."""
             
             logging.info(f"Gemini'ye gönderilen konu keşfi promptu: \n---\n{topics_prompt}\n---")
             topics_response = generate_content_with_gemini(topics_prompt)
@@ -1347,17 +1288,17 @@ def trigger_daily_content_generation():
         if apod_already_posted:
             logging.info(f"'{expected_apod_title_prefix}' başlıklı APOD yazısı bugün zaten yayınlanmış. Bu adım atlanıyor.")
         else:
-        try:
-            logging.info(f"NASA APOD için 'post_nasa_apod_logic' çağrılıyor. Zaman: {schedule_times[0]}")
-            result = post_nasa_apod_logic(schedule_time=schedule_times[0])
-            if result:
-                logging.info(f"NASA APOD içeriği başarıyla oluşturuldu ve {schedule_times[0]} tarihine zamanlandı.")
-            else:
+            try:
+                logging.info(f"NASA APOD için 'post_nasa_apod_logic' çağrılıyor. Zaman: {schedule_times[0]}")
+                result = post_nasa_apod_logic(schedule_time=schedule_times[0])
+                if result:
+                    logging.info(f"NASA APOD içeriği başarıyla oluşturuldu ve {schedule_times[0]} tarihine zamanlandı.")
+                else:
                     logging.error(f"!!! HATA: NASA APOD içeriği oluşturulamadı veya atlandı. Zaman: {schedule_times[0]}")
-        except ValueError as e:
-            logging.error(f"NASA APOD içeriği oluşturulurken veya zamanlanırken bir değer hatası oluştu: {e}")
-        except Exception as e:
-            logging.error(f"NASA APOD içeriği oluşturulurken veya zamanlanırken beklenmedik bir hata oluştu: {e}")
+            except ValueError as e:
+                logging.error(f"NASA APOD içeriği oluşturulurken veya zamanlanırken bir değer hatası oluştu: {e}")
+            except Exception as e:
+                logging.error(f"NASA APOD içeriği oluşturulurken veya zamanlanırken beklenmedik bir hata oluştu: {e}")
 
         # 2. Mevcut yazıları tekrar kontrol etmeye gerek yok, en başta aldık
         logging.info("\n=== 2/4: Mevcut Yazılar Kontrol Ediliyor (Adım atlandı, başlangıçta yapıldı) ===\n")
@@ -1440,7 +1381,7 @@ def test_background_endpoint():
     # scheduler.add_job(simple_background_task, 'date', run_date=datetime.now() + timedelta(seconds=2)) # Removed as per new_code
     trigger_thread = threading.Thread(target=simple_background_task)
     trigger_thread.start()
-    return jsonify({"status": "success", "message": "Basit test görevi arka planda eklendi. 5 saniye içinde logları kontrol edin."})
+    return jsonify({"status": "success", "message": "Basit test görevi arka planda eklendi. 5 saniye içinde logları kontrol edin."}), 200
 
 @app.route('/generate-daily-content', methods=['POST'])
 def generate_daily_content_endpoint():
