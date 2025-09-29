@@ -407,7 +407,7 @@ def markdown_to_html_links(text):
     """Metin içindeki Markdown link formatını [text](url) HTML <a> etiketine dönüştürür."""
     return re.sub(r'\[(.*?)\]\((.*?)\)', r'<a href="\2">\1</a>', text)
 
-def build_wordpress_content(title, main_content_parts, focus_keyword, nas-image_url=None, nas-image_id=None, ai_image_url=None, ai_image_id=None, sources=None, ai_image2_url=None, ai_image2_id=None):
+def build_wordpress_content(title, main_content_parts, focus_keyword, nasa_image_url=None, nasa_image_id=None, ai_image_url=None, ai_image_id=None, sources=None, ai_image2_url=None, ai_image2_id=None):
     """
     Verilen yapılandırılmış veri parçalarından WordPress blok düzenleyici formatında tam bir HTML içeriği oluşturur.
     Görsel bloklarına odak anahtar kelimesini alt metin olarak ekler.
@@ -417,9 +417,9 @@ def build_wordpress_content(title, main_content_parts, focus_keyword, nas-image_
     content_html = f'<!-- wp:quote -->\n<blockquote class="wp-block-quote"><!-- wp:heading {{"level":3}} -->\n<h3 class="wp-block-heading"><strong>{title}</strong></h3>\n<!-- /wp:heading --></blockquote>\n<!-- /wp:quote -->\n\n'
     
     # 2. NASA Görseli (varsa)
-    if nas-image_url and nas-image_id:
-        nas-image_block = f'<!-- wp:image {{"id":{nas-image_id},"sizeSlug":"large","style":{{"border":{{"radius":"10px"}}}}}} -->\n<figure class="wp-block-image size-large has-custom-border"><img src="{nas-image_url}" alt="{focus_keyword}" class="wp-image-{nas-image_id}" style="border-radius:10px"/></figure>\n<!-- /wp:image -->\n\n'
-        content_html += nas-image_block
+    if nasa_image_url and nasa_image_id:
+        nasa_image_block = f'<!-- wp:image {{"id":{nasa_image_id},"sizeSlug":"large","style":{{"border":{{"radius":"10px"}}}}}} -->\n<figure class="wp-block-image size-large has-custom-border"><img src="{nasa_image_url}" alt="{focus_keyword}" class="wp-image-{nasa_image_id}" style="border-radius:10px"/></figure>\n<!-- /wp:image -->\n\n'
+        content_html += nasa_image_block
 
     # 3. Ana İçerik Blokları ve AI Görselleri
     ai_image1_inserted = False
@@ -554,7 +554,7 @@ def get_nasa_apod():
         logging.error(f"NASA APOD API'sine bağlanırken hata oluştu: {e}")
         return None
 
-def post_to_wordpress(title: str, content: str, featured_medi-id: int = None, meta_description: str = None, schedule_time: str = None, 
+def post_to_wordpress(title: str, content: str, featured_media_id: int = None, meta_description: str = None, schedule_time: str = None, 
                      meta_title: str = None, tags: list = None, category_id: int = None, slug: str = None, focus_keyword: str = None):
     """
     Verilen başlık ve içerikle WordPress'e SEO optimize edilmiş bir yazı gönderir.
@@ -583,8 +583,8 @@ def post_to_wordpress(title: str, content: str, featured_medi-id: int = None, me
     }
     
     # Featured Image
-    if featured_medi-id:
-        post_data["featured_media"] = featured_medi-id
+    if featured_media_id:
+        post_data["featured_media"] = featured_media_id
     
     # Kategori
     if category_id:
@@ -613,10 +613,10 @@ def post_to_wordpress(title: str, content: str, featured_medi-id: int = None, me
 
     if schedule_time:
         post_data["date"] = schedule_time
-    
+
     response = requests.post(api_url, headers=headers, json=post_data, timeout=30)
     try:
-        response.raise_for_status()
+    response.raise_for_status()
     except requests.exceptions.HTTPError as e:
         logging.error(f"WordPress post hatası: {e}")
         logging.error(f"WP Yanıtı: {response.status_code} - {response.text}")
@@ -815,7 +815,7 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
         ai_media1_id = None
         ai_media2_url = None
         ai_media2_id = None
-        featured_medi-id_to_use = None # Öne çıkarılacak görseli belirlemek için
+        featured_media_id_to_use = None # Öne çıkarılacak görseli belirlemek için
         
         # İlk görsel
         ai_image1_data = generate_ai_image(ai_image1_prompt)
@@ -828,7 +828,7 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
             if ai_media1_info and ai_media1_info.get('url'):
                 ai_media1_url = ai_media1_info.get('url')
                 ai_media1_id = ai_media1_info.get('id')
-                featured_medi-id_to_use = ai_media1_id # İlk görseli öne çıkan yap
+                featured_media_id_to_use = ai_media1_id # İlk görseli öne çıkan yap
             else:
                 logging.warning("İlk AI görseli WordPress'e yüklenemedi. (upload başarısız)")
         
@@ -844,12 +844,12 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
                 ai_media2_url = ai_media2_info.get('url')
                 ai_media2_id = ai_media2_info.get('id')
                 # Eğer ilk görsel başarısız olduysa, ikinciyi öne çıkan yap
-                if not featured_medi-id_to_use:
-                    featured_medi-id_to_use = ai_media2_id
+                if not featured_media_id_to_use:
+                    featured_media_id_to_use = ai_media2_id
             else:
                 logging.warning("İkinci AI görseli WordPress'e yüklenemedi. (upload başarısız)")
 
-        if not featured_medi-id_to_use:
+        if not featured_media_id_to_use:
             logging.warning(f"'{seo_baslik}' konusu için kullanılabilir AI görseli bulunamadı veya yüklenemedi. Yazı görsel olmadan yayınlanacak.")
 
         # 4. Adım: Tamamen formatlanmış içeriği oluştur
@@ -857,8 +857,8 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
             title=yazi_basligi,
             main_content_parts=main_content_parts,
             focus_keyword=focus_keyword,
-            nas-image_url=None,  # Bu endpoint'te NASA görseli yok
-            nas-image_id=None,
+            nasa_image_url=None,  # Bu endpoint'te NASA görseli yok
+            nasa_image_id=None,
             ai_image_url=ai_media1_url,
             ai_image_id=ai_media1_id,
             sources=kaynaklar,
@@ -871,7 +871,7 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
         post_details = post_to_wordpress(
             title=seo_baslik,
             content=final_content,
-            featured_medi-id=featured_medi-id_to_use,
+            featured_media_id=featured_media_id_to_use,
             meta_description=meta_aciklama,
             meta_title=seo_baslik,  # Meta başlık, SEO başlığı ile aynı olabilir
             tags=[tag.strip() for tag in etiketler.split(',') if tag.strip()] if etiketler else [],
@@ -879,7 +879,7 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
             slug=slug,
             focus_keyword=focus_keyword
         )
-        logging.info(f"BAŞARILI: Google içerik gönderildi. Post ID: {post_details.get('id')}, featured_medi-id: {featured_medi-id_to_use}")
+        logging.info(f"BAŞARILI: Google içerik gönderildi. Post ID: {post_details.get('id')}, featured_media_id: {featured_media_id_to_use}")
 
         return True # Başarılı olduğunu belirtmek için True döndür
 
@@ -908,7 +908,7 @@ def generate_and_post_logic_with_context(topic: str, source_articles: list, sche
             # Mantık fonksiyonunu belirlenen zamanlama ve kaynaklarla çağır
             success = generate_and_post_logic(topic, source_articles=source_articles, schedule_time=final_schedule_time)
             if success:
-                logging.info(f"BAŞARILI: '{topic}' konusu işlendi ve {final_schedule_time} tarihine zamanlandı.")
+            logging.info(f"BAŞARILI: '{topic}' konusu işlendi ve {final_schedule_time} tarihine zamanlandı.")
             else:
                 logging.warning(f"UYARI: '{topic}' konusu işlenemedi veya atlandı (örneğin, Gemini format hatası).")
         except Exception as e:
@@ -939,7 +939,7 @@ def post_nasa_apod_logic(schedule_time: str = None):
         if apod_date != today_date_str:
             logging.error(f"!!! HATA: Bugünün APOD içeriği mevcut değil. Gelen tarih: {apod_date}, Beklenen tarih: {today_date_str}. İşlem atlandı.")
             return None
-        
+
         if media_type != "image":
             logging.error(f"!!! HATA: Bugünün APOD içeriği bir görsel değil, bir '{media_type}'. İşlem atlandı.")
             return None
@@ -1054,8 +1054,8 @@ def post_nasa_apod_logic(schedule_time: str = None):
             title=yazi_basligi,
             main_content_parts=main_content_parts,
             focus_keyword=focus_keyword,
-            nas-image_url=image_source_url,
-            nas-image_id=medi-id,
+            nasa_image_url=image_source_url,
+            nasa_image_id=media_id,
             ai_image_url=None,  # APOD için AI görseli üretmiyoruz
             ai_image_id=None,
             sources=kaynaklar
@@ -1075,7 +1075,7 @@ def post_nasa_apod_logic(schedule_time: str = None):
         post_details = post_to_wordpress(
             title=final_title,
             content=final_content,
-            featured_medi-id=medi-id,
+            featured_media_id=media_id,
             meta_description=meta_aciklama,
             schedule_time=schedule_time,
             meta_title=final_title,
@@ -1083,7 +1083,7 @@ def post_nasa_apod_logic(schedule_time: str = None):
             slug=final_slug,
             focus_keyword=focus_keyword
         )
-        logging.info(f"BAŞARILI: NASA APOD içeriği gönderildi. Post ID: {post_details.get('id')}, featured_medi-id: {medi-id}")
+        logging.info(f"BAŞARILI: NASA APOD içeriği gönderildi. Post ID: {post_details.get('id')}, featured_media_id: {media_id}")
         return True # Başarılı olduğunu belirtmek için True döndür
     
     except ValueError as e:
@@ -1093,7 +1093,7 @@ def post_nasa_apod_logic(schedule_time: str = None):
         logging.error(f"İşlem sırasında beklenmedik bir hata oluştu: {e}")
         return None
     finally:
-        logging.info("[LOG] post_nasa_apod_logic BİTTİ")
+    logging.info("[LOG] post_nasa_apod_logic BİTTİ")
 
 
 def get_wordpress_posts(limit=100):
@@ -1288,17 +1288,17 @@ def trigger_daily_content_generation():
         if apod_already_posted:
             logging.info(f"'{expected_apod_title_prefix}' başlıklı APOD yazısı bugün zaten yayınlanmış. Bu adım atlanıyor.")
         else:
-            try:
-                logging.info(f"NASA APOD için 'post_nasa_apod_logic' çağrılıyor. Zaman: {schedule_times[0]}")
-                result = post_nasa_apod_logic(schedule_time=schedule_times[0])
-                if result:
-                    logging.info(f"NASA APOD içeriği başarıyla oluşturuldu ve {schedule_times[0]} tarihine zamanlandı.")
-                else:
+        try:
+            logging.info(f"NASA APOD için 'post_nasa_apod_logic' çağrılıyor. Zaman: {schedule_times[0]}")
+            result = post_nasa_apod_logic(schedule_time=schedule_times[0])
+            if result:
+                logging.info(f"NASA APOD içeriği başarıyla oluşturuldu ve {schedule_times[0]} tarihine zamanlandı.")
+            else:
                     logging.error(f"!!! HATA: NASA APOD içeriği oluşturulamadı veya atlandı. Zaman: {schedule_times[0]}")
-            except ValueError as e:
-                logging.error(f"NASA APOD içeriği oluşturulurken veya zamanlanırken bir değer hatası oluştu: {e}")
-            except Exception as e:
-                logging.error(f"NASA APOD içeriği oluşturulurken veya zamanlanırken beklenmedik bir hata oluştu: {e}")
+        except ValueError as e:
+            logging.error(f"NASA APOD içeriği oluşturulurken veya zamanlanırken bir değer hatası oluştu: {e}")
+        except Exception as e:
+            logging.error(f"NASA APOD içeriği oluşturulurken veya zamanlanırken beklenmedik bir hata oluştu: {e}")
 
         # 2. Mevcut yazıları tekrar kontrol etmeye gerek yok, en başta aldık
         logging.info("\n=== 2/4: Mevcut Yazılar Kontrol Ediliyor (Adım atlandı, başlangıçta yapıldı) ===\n")
@@ -1341,9 +1341,9 @@ def trigger_daily_content_generation():
                 )
                 
                 if success:
-                    logging.info(f"\n--- Konu '{topic}' Başarıyla Zamanlandı: {post_schedule_time} ---\n")
-                    published_google_posts += 1 # Başarılı yayın sayısını artır
-                    existing_titles.append(topic) # Gelecek kontroller için listeye ekle
+                logging.info(f"\n--- Konu '{topic}' Başarıyla Zamanlandı: {post_schedule_time} ---\n")
+                published_google_posts += 1 # Başarılı yayın sayısını artır
+                existing_titles.append(topic) # Gelecek kontroller için listeye ekle
                 else:
                     logging.warning(f"'{topic}' konusu için içerik üretilemedi.")
 
@@ -1414,10 +1414,10 @@ def scheduler_loop():
         
         # Her 5 dakikada bir zamanlayıcının çalıştığını logla (daha sık ping için)
         if now.minute % 5 == 0 and now.second < 10:
-            logging.info(f"Zamanlayıcı aktif - Şu anki zaman: {now.strftime('%H:%M:%S')} - Hedef zaman: 13:19")
+            logging.info(f"Zamanlayıcı aktif - Şu anki zaman: {now.strftime('%H:%M:%S')} - Hedef zaman: 13:37")
         
-        # Her gün 13:19'de çalıştır (AMA sadece bir kez!)
-        if now.hour == 13 and now.minute == 19:
+        # Her gün 13:37'de çalıştır (AMA sadece bir kez!)
+        if now.hour == 13 and now.minute == 37:
             # Bugün daha önce çalıştı mı kontrol et
             if last_execution_date != current_date:
                 logging.info("Zaman geldi! Otomatik içerik üretimi tetikleniyor...")
@@ -1426,7 +1426,7 @@ def scheduler_loop():
                 trigger_thread.start()
                 # Bugün çalıştığını işaretle
                 last_execution_date = current_date
-                logging.info(f"Günlük işlem tamamlandı. Bir sonraki çalışma: {(now + timedelta(days=1)).strftime('%Y-%m-%d 13:19')}")
+                logging.info(f"Günlük işlem tamamlandı. Bir sonraki çalışma: {(now + timedelta(days=1)).strftime('%Y-%m-%d 13:37')}")
                 # Görevin aynı dakika içinde tekrar tetiklenmemesi için 61 saniye bekle
                 time.sleep(61)
             else:
