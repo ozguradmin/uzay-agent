@@ -711,7 +711,7 @@ def get_nasa_apod():
         return None
 
 def post_to_wordpress(title: str, content: str, featured_media_id: int = None, meta_description: str = None, schedule_time: str = None, 
-                     meta_title: str = None, meta_keywords: str = None, tags: list = None, category_id: int = None):
+                     meta_title: str = None, meta_keywords: str = None, tags: list = None, category_id: int = None, slug: str = None):
     """
     Verilen başlık ve içerikle WordPress'e SEO optimize edilmiş bir yazı gönderir.
     Eğer schedule_time verilirse, gönderiyi o tarihe zamanlar.
@@ -754,10 +754,16 @@ def post_to_wordpress(title: str, content: str, featured_media_id: int = None, m
         except Exception as e:
             logging.warning(f"Etiket ID çözümlemede sorun: {e}. Etiketler atlanacak.")
 
-    # Yoast özel meta alanlarını REST üzerinden gönderme; çoğu kurulumda reddedilir.
-    # Bunun yerine özet alanını (excerpt) dolduralım.
+    # Yoast SEO meta alanlarını REST API üzerinden gönder
     if meta_title:
         post_data["title"] = meta_title  # Use meta_title directly for focus keyphrase
+        # Yoast SEO meta fields
+        post_data["meta"] = {
+            "_yoast_wpseo_title": meta_title,
+            "_yoast_wpseo_metadesc": meta_description[:155] if meta_description else "",
+            "_yoast_wpseo_focuskw": meta_keywords.split(',')[0].strip() if meta_keywords else "",  # First keyword as focus keyphrase
+            "_yoast_wpseo_keywords": meta_keywords if meta_keywords else ""
+        }
 
     if meta_description:
         post_data["excerpt"] = meta_description[:155] # Use excerpt for meta description (Yoast SEO reads from excerpt)
@@ -765,6 +771,9 @@ def post_to_wordpress(title: str, content: str, featured_media_id: int = None, m
     if schedule_time:
         post_data['status'] = 'future'
         post_data['date'] = schedule_time
+
+    if slug:
+        post_data['slug'] = slug
 
     logging.info(f"[POST] WP istek hazir: url={api_url}, has_featured={'yes' if featured_media_id else 'no'}, tags={post_data.get('tags')}, status={post_data.get('status')}, date={post_data.get('date')}")
     response = requests.post(api_url, headers=headers, json=post_data, timeout=30)
@@ -1095,8 +1104,15 @@ def post_nasa_apod_logic(schedule_time: str = None):
         1.  **SEO Başlığı:** 65 karakteri geçmeyen, merak uyandıran ve SADECE fotoğrafın konusunu açıklayan bir Türkçe başlık üret. 
             KESİNLİKLE YORUM EKLEME. "Harika bir görev", "Kozmik", "İşte analizim" gibi ifadeler KULLANMA. Sadece başlık olsun.
             Örnekler: "Mars Yüzeyindeki Gizemli Delik", "Perseverance'dan Yeni Görüntü", "Andromeda Galaksisi'nin Net Fotoğrafı"
-        2.  **Meta Açıklama:** 160 karakteri geçmeyen, anahtar kelimeleri içeren bir meta açıklama yaz.
-        3.  **Yazı Başlığı (H3):** İçerikte gösterilecek, daha sanatsal ve uzun bir başlık üret.
+        2.  **Meta Başlık:** 60 karakteri geçmeyen, SEO optimize edilmiş meta başlık (title tag). Odak anahtar kelimeyi içermeli.
+        3.  **Meta Açıklama:** 155 karakteri geçmeyen, odak anahtar kelimeyi içeren bir meta açıklama yaz.
+        4.  **Meta Anahtar Kelimeler:** Virgülle ayrılmış 5-8 adet anahtar kelime (örnek: "uzay, astronomi, NASA, keşif, bilim").
+        5.  **Yazı Başlığı (H3):** İçerikte gösterilecek, daha sanatsal ve uzun bir başlık üret.
+        6.  **SEO YAZIM KURALLARI:**
+            - Her cümle maksimum 15 kelime olsun
+            - Edilgen çatı kullanma, etken çatı tercih et (örn: "NASA keşfetti" yerine "Keşif yapıldı")
+            - Paragraflar 2-3 cümle olsun
+            - Odak anahtar kelimeyi giriş paragrafında kullan
         4.  **İçerik Akışı:**
             *   İngilizce açıklamayı temel alarak, en az 400 kelimelik özgün bir metin oluştur.
             *   Metni `[H2]` etiketleriyle mantıksal alt başlıklara ayır.
@@ -1223,8 +1239,12 @@ def post_nasa_apod_logic(schedule_time: str = None):
         # 6. Adım: Yazıyı WordPress'e gönder
         today_date = datetime.now().strftime("%d.%m.%Y")
         final_title = f"Günün Astronomi Fotoğrafı ({today_date}): {seo_baslik}"  # Günün astronomi fotoğrafı ve tarih ekle
-        logging.info(f"[APOD] WordPress post gönderimi başlıyor: featured_media_id={media_id}, schedule_time={schedule_time}")
-        post_details = post_to_wordpress(final_title, final_content, featured_media_id=media_id, meta_description=meta_aciklama, schedule_time=schedule_time)
+        
+        # Kısa slug oluştur (SEO için optimize edilmiş)
+        short_slug = f"apod-{today_date.replace('.', '')}-{seo_baslik.lower().replace(' ', '-').replace(':', '').replace('(', '').replace(')', '')[:30]}"
+        
+        logging.info(f"[APOD] WordPress post gönderimi başlıyor: featured_media_id={media_id}, schedule_time={schedule_time}, slug={short_slug}")
+        post_details = post_to_wordpress(final_title, final_content, featured_media_id=media_id, meta_description=meta_aciklama, schedule_time=schedule_time, slug=short_slug, meta_title=meta_baslik, meta_keywords=meta_keywords)
         logging.info(f"[APOD] POST OK: id={post_details.get('id')}, status={post_details.get('status')}, date={post_details.get('date')}")
         return True # Başarılı olduğunu belirtmek için True döndür
     
