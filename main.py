@@ -1315,7 +1315,7 @@ def post_nasa_apod_logic(schedule_time: str = None):
         short_slug = f"apod-{today_date.replace('.', '')}-{clean_title[:25]}"
         
         logging.info(f"[APOD] WordPress post gönderimi başlıyor: featured_media_id={media_id}, schedule_time={schedule_time}, slug={short_slug}")
-        post_details = post_to_wordpress(final_title, final_content, featured_media_id=media_id, meta_description=meta_aciklama, schedule_time=schedule_time, slug=short_slug, meta_title=meta_baslik, meta_keywords=meta_keywords)
+        post_details = post_to_wordpress(final_title, final_content, featured_media_id=media_id, meta_description=meta_aciklama, schedule_time=schedule_time, slug=short_slug, meta_keywords=meta_keywords)
         logging.info(f"[APOD] POST OK: id={post_details.get('id')}, status={post_details.get('status')}, date={post_details.get('date')}")
         return True # Başarılı olduğunu belirtmek için True döndür
     
