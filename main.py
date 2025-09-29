@@ -512,6 +512,75 @@ def upload_image_to_wordpress(title: str, image_url: str = None, image_data: byt
         logging.error("Yüklenecek görsel verisi bulunamadı.")
         return None
 
+    # Pillow ile görsel optimizasyonu (başarısız olursa ham veriyi kullan)
+    try:
+        logging.info("[MEDIA] Pillow ile optimizasyon başlıyor...")
+        img = Image.open(BytesIO(image_content))
+        logging.info(f"[MEDIA] Orijinal boyut: {img.width}x{img.height}, mode={img.mode}, format={img.format}")
+        if img.width > 1200:
+            ratio = 1200 / img.width
+            new_height = int(img.height * ratio)
+            img = img.resize((1200, new_height), Image.Resampling.LANCZOS)
+            logging.info(f"[MEDIA] Yeniden boyutlandırıldı: {img.width}x{img.height}")
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+        output_buffer = BytesIO()
+        img.save(output_buffer, format='JPEG', quality=85, optimize=True)
+        optimized_image_data = output_buffer.getvalue()
+        logging.info(f"[MEDIA] Optimizasyon tamam: byte={len(optimized_image_data)}")
+    except Exception as e:
+        logging.error(f"[MEDIA] Görsel işlenirken hata (Pillow). Ham veri ile devam ediliyor. Hata: {e}")
+        optimized_image_data = image_content
+
+    # WordPress'e yükleme - önce multipart, hata olursa binary fallback
+    media_api_url = f"{wp_url.rstrip('/')}/wp-json/wp/v2/media"
+    credentials = f"{wp_user}:{wp_password}"
+    token = base64.b64encode(credentials.encode())
+    headers = {
+        'Authorization': f'Basic {token.decode("utf-8")}',
+        'Accept': 'application/json',
+        'User-Agent': 'UzayAgent/1.0 (+https://galaktikuzay.com)'
+    }
+
+    try:
+        files = {
+            'file': (image_name, optimized_image_data, 'image/jpeg')
+        }
+        logging.info(f"[MEDIA] WordPress'e yükleme başlıyor: url={media_api_url}, dosya={image_name}, boyut={len(optimized_image_data)}")
+        upload_response = requests.post(media_api_url, headers=headers, files=files, timeout=60)
+        upload_response.raise_for_status()
+        media_data = upload_response.json()
+        logging.info(f"[MEDIA] Görsel başarıyla yüklendi. Media ID: {media_data.get('id')}, source_url: {media_data.get('source_url')}")
+        return {
+            "id": media_data['id'],
+            "url": media_data['source_url']
+        }
+    except requests.exceptions.RequestException as e:
+        body = e.response.text if getattr(e, 'response', None) is not None else 'Yanıt yok'
+        status = e.response.status_code if getattr(e, 'response', None) is not None else 'N/A'
+        logging.error(f"[MEDIA] Multipart yükleme HATASI: http_status={status}, detay={body}")
+        try:
+            alt_headers = {
+                'Authorization': headers['Authorization'],
+                'Accept': 'application/json',
+                'Content-Type': 'image/jpeg',
+                'Content-Disposition': f'attachment; filename="{image_name}"',
+                'User-Agent': headers['User-Agent']
+            }
+            logging.info("[MEDIA] Fallback upload (binary body) deneniyor...")
+            upload_response = requests.post(media_api_url, headers=alt_headers, data=optimized_image_data, timeout=60)
+            upload_response.raise_for_status()
+            media_data = upload_response.json()
+            logging.info(f"[MEDIA] Fallback ile görsel yüklendi. Media ID: {media_data.get('id')}, source_url: {media_data.get('source_url')}")
+            return {
+                "id": media_data['id'],
+                "url": media_data['source_url']
+            }
+        except requests.exceptions.RequestException as e2:
+            body2 = e2.response.text if getattr(e2, 'response', None) is not None else 'Yanıt yok'
+            status2 = e2.response.status_code if getattr(e2, 'response', None) is not None else 'N/A'
+            logging.error(f"[MEDIA] Fallback upload da HATA: http_status={status2}, detay={body2}")
+            return None
 
 def ensure_tag_ids(tag_names: list) -> list:
     """
@@ -550,24 +619,27 @@ def ensure_tag_ids(tag_names: list) -> list:
             logging.warning(f"Etiket oluşturma/arama hatası ('{name}'): {e}")
     return tag_ids
 
-    # Pillow ile görsel optimizasyonu
+    # Pillow ile görsel optimizasyonu (başarısız olursa ham veriyi kullan)
     try:
+        logging.info("[MEDIA] Pillow ile optimizasyon başlıyor...")
         img = Image.open(BytesIO(image_content))
-        
+        logging.info(f"[MEDIA] Orijinal boyut: {img.width}x{img.height}, mode={img.mode}, format={img.format}")
         # Genişliği 1200px'den büyükse yeniden boyutlandır
         if img.width > 1200:
             ratio = 1200 / img.width
             new_height = int(img.height * ratio)
             img = img.resize((1200, new_height), Image.Resampling.LANCZOS)
-            
-        # Optimize edilmiş görseli bir byte stream'e kaydet
+            logging.info(f"[MEDIA] Yeniden boyutlandırıldı: {img.width}x{img.height}")
+        # JPEG'e dönüştür (PNG/WEBP olabilir)
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
         output_buffer = BytesIO()
         img.save(output_buffer, format='JPEG', quality=85, optimize=True)
         optimized_image_data = output_buffer.getvalue()
-
+        logging.info(f"[MEDIA] Optimizasyon tamam: byte={len(optimized_image_data)}")
     except Exception as e:
-        logging.error(f"Görsel işlenirken hata (Pillow): {e}")
-        return None
+        logging.error(f"[MEDIA] Görsel işlenirken hata (Pillow). Ham veri ile devam ediliyor. Hata: {e}")
+        optimized_image_data = image_content
 
     # WordPress'e yükle
     media_api_url = f"{wp_url.rstrip('/')}/wp-json/wp/v2/media"
