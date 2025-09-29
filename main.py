@@ -1252,8 +1252,8 @@ def scheduler_loop():
     while True:
         now = datetime.now()
         
-        # Her 10 dakikada bir zamanlayıcının çalıştığını logla
-        if now.minute % 10 == 0 and now.second == 0:
+        # Her 5 dakikada bir zamanlayıcının çalıştığını logla (daha sık ping için)
+        if now.minute % 5 == 0 and now.second < 10:
             logging.info(f"Zamanlayıcı aktif - Şu anki zaman: {now.strftime('%H:%M:%S')} - Hedef zaman: 03:40")
         
         # Her gün 03:40'da çalıştır
@@ -1265,8 +1265,8 @@ def scheduler_loop():
             # Görevin aynı dakika içinde tekrar tetiklenmemesi için 61 saniye bekle
             time.sleep(61)
         else:
-            # Bir sonraki kontrol için 60 saniye bekle
-            time.sleep(60)
+            # Bir sonraki kontrol için 10 saniye bekle (daha sık ping için)
+            time.sleep(10)
 
 # Zamanlayıcı döngüsünü ana uygulamadan ayrı bir thread'de başlat
 scheduler_thread = threading.Thread(target=scheduler_loop)
