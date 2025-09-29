@@ -338,8 +338,21 @@ def generate_content_with_gemini(prompt: str):
     }
 
     try:
-        response = requests.post(url, headers=headers, json=data, timeout=60)
-        response.raise_for_status()
+        # 503 hatası için retry mekanizması
+        max_retries = 3
+        for attempt in range(max_retries):
+            response = requests.post(url, headers=headers, json=data, timeout=60)
+            try:
+                response.raise_for_status()
+                break  # Başarılı, döngüden çık
+            except requests.exceptions.RequestException as http_err:
+                if response.status_code == 503 and attempt < max_retries - 1:
+                    wait_time = (attempt + 1) * 5  # 5, 10, 15 saniye bekle
+                    logging.warning(f"Gemini API 503 hatası, {wait_time} saniye bekleyip tekrar denenecek (deneme {attempt + 1}/{max_retries})")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    raise http_err  # Diğer hataları yukarı fırlat
         
         candidates = response.json().get('candidates', [])
         if candidates and candidates[0].get('content', {}).get('parts', []):
@@ -381,14 +394,24 @@ def generate_ai_image(prompt: str):
             }]
         }
 
-        response = requests.post(url, headers=headers, json=data, timeout=120)
-        try:
-            response.raise_for_status()
-        except requests.exceptions.RequestException as http_err:
-            logging.error(f"!!! HATA: Gemini Görsel API HTTP hatası: {http_err}")
-            logging.error(f"Yanıt Durum Kodu: {response.status_code}")
-            logging.error(f"Yanıt Metni: {response.text}")
-            return None
+        # 503 hatası için retry mekanizması
+        max_retries = 3
+        for attempt in range(max_retries):
+            response = requests.post(url, headers=headers, json=data, timeout=120)
+            try:
+                response.raise_for_status()
+                break  # Başarılı, döngüden çık
+            except requests.exceptions.RequestException as http_err:
+                if response.status_code == 503 and attempt < max_retries - 1:
+                    wait_time = (attempt + 1) * 5  # 5, 10, 15 saniye bekle
+                    logging.warning(f"Gemini API 503 hatası, {wait_time} saniye bekleyip tekrar denenecek (deneme {attempt + 1}/{max_retries})")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    logging.error(f"!!! HATA: Gemini API HTTP hatası: {http_err}")
+                    logging.error(f"Yanıt Durum Kodu: {response.status_code}")
+                    logging.error(f"Yanıt Metni: {response.text}")
+                    return None
 
         response_data = response.json()
         # logging.info(f"Gemini Görsel API ham yanıtı: {response_data}") # Ham yanıtı sadece hata durumunda loglayacağız
