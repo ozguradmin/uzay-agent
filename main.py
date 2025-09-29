@@ -1135,7 +1135,7 @@ def post_nasa_apod_logic(schedule_time: str = None):
         logging.error(f"İşlem sırasında beklenmedik bir hata oluştu: {e}")
         return None
     finally:
-    logging.info("[LOG] post_nasa_apod_logic BİTTİ")
+        logging.info("[LOG] post_nasa_apod_logic BİTTİ")
 
 
 def get_wordpress_posts(limit=100):
