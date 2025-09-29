@@ -935,7 +935,7 @@ def generate_and_post_logic_with_context(topic: str, source_articles: list, sche
             # Mantık fonksiyonunu belirlenen zamanlama ve kaynaklarla çağır
             success = generate_and_post_logic(topic, source_articles=source_articles, schedule_time=final_schedule_time)
             if success:
-            logging.info(f"BAŞARILI: '{topic}' konusu işlendi ve {final_schedule_time} tarihine zamanlandı.")
+                logging.info(f"BAŞARILI: '{topic}' konusu işlendi ve {final_schedule_time} tarihine zamanlandı.")
             else:
                 logging.warning(f"UYARI: '{topic}' konusu işlenemedi veya atlandı (örneğin, Gemini format hatası).")
         except Exception as e:
