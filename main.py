@@ -757,15 +757,21 @@ def post_to_wordpress(title: str, content: str, featured_media_id: int = None, m
     # Yoast SEO meta alanlarını REST API üzerinden gönder
     if meta_title:
         post_data["title"] = meta_title  # Use meta_title directly for focus keyphrase
-        # Yoast SEO meta fields
+        # Yoast SEO meta fields - farklı format deneyelim
         focus_keyword = meta_keywords.split(',')[0].strip() if meta_keywords else ""
+        
+        # Meta alanlarını hem meta hem de yoast_wpseo prefix'i ile gönder
         post_data["meta"] = {
             "_yoast_wpseo_title": meta_title,
             "_yoast_wpseo_metadesc": meta_description[:155] if meta_description else "",
-            "_yoast_wpseo_focuskw": focus_keyword,  # First keyword as focus keyphrase
-            "_yoast_wpseo_keywords": meta_keywords if meta_keywords else ""
+            "_yoast_wpseo_focuskw": focus_keyword,
+            "_yoast_wpseo_keywords": meta_keywords if meta_keywords else "",
+            "yoast_wpseo_title": meta_title,
+            "yoast_wpseo_metadesc": meta_description[:155] if meta_description else "",
+            "yoast_wpseo_focuskw": focus_keyword,
+            "yoast_wpseo_keywords": meta_keywords if meta_keywords else ""
         }
-        logging.info(f"[POST] Yoast meta alanları eklendi: focus_kw='{focus_keyword}', meta_desc='{meta_description[:50] if meta_description else 'None'}...'")
+        logging.info(f"[POST] Yoast meta alanları eklendi (çift format): focus_kw='{focus_keyword}', meta_desc='{meta_description[:50] if meta_description else 'None'}...'")
     else:
         logging.warning("[POST] meta_title boş, Yoast meta alanları eklenmedi!")
 
@@ -787,7 +793,32 @@ def post_to_wordpress(title: str, content: str, featured_media_id: int = None, m
         logging.error(f"WordPress post hatası: {e}")
         logging.error(f"WP Yanıtı: {response.status_code} - {response.text}")
         raise
-    return response.json()
+    
+    post_details = response.json()
+    post_id = post_details.get('id')
+    
+    # Post oluşturulduktan sonra Yoast meta alanlarını ayrıca güncelle
+    if meta_title and post_id:
+        try:
+            focus_keyword = meta_keywords.split(',')[0].strip() if meta_keywords else ""
+            yoast_update_data = {
+                "meta": {
+                    "_yoast_wpseo_title": meta_title,
+                    "_yoast_wpseo_metadesc": meta_description[:155] if meta_description else "",
+                    "_yoast_wpseo_focuskw": focus_keyword,
+                    "_yoast_wpseo_keywords": meta_keywords if meta_keywords else ""
+                }
+            }
+            update_url = f"{wp_url.rstrip('/')}/wp-json/wp/v2/posts/{post_id}"
+            update_response = requests.put(update_url, headers=headers, json=yoast_update_data, timeout=30)
+            if update_response.status_code == 200:
+                logging.info(f"[POST] Yoast meta alanları başarıyla güncellendi: post_id={post_id}, focus_kw='{focus_keyword}'")
+            else:
+                logging.warning(f"[POST] Yoast meta güncelleme başarısız: {update_response.status_code} - {update_response.text}")
+        except Exception as e:
+            logging.warning(f"[POST] Yoast meta güncelleme hatası: {e}")
+    
+    return post_details
 
 
 def get_smart_schedule_times():
@@ -1629,10 +1660,10 @@ def scheduler_loop():
         
         # Her 5 dakikada bir zamanlayıcının çalıştığını logla (daha sık ping için)
         if now.minute % 5 == 0 and now.second < 10:
-            logging.info(f"Zamanlayıcı aktif - Şu anki zaman: {now.strftime('%H:%M:%S')} - Hedef zaman: 14:15")
+            logging.info(f"Zamanlayıcı aktif - Şu anki zaman: {now.strftime('%H:%M:%S')} - Hedef zaman: 18:36")
         
-        # Her gün 14:15'te çalıştır (AMA sadece bir kez!)
-        if now.hour == 14 and now.minute == 15:
+        # Her gün 18:36'da çalıştır (AMA sadece bir kez!)
+        if now.hour == 18 and now.minute == 36:
             # Bugün daha önce çalıştı mı kontrol et
             if last_execution_date != current_date:
                 logging.info("Zaman geldi! Otomatik içerik üretimi tetikleniyor...")
