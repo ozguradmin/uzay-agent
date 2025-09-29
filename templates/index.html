@@ -68,6 +68,9 @@
                 <button id="trigger-auto-generation" class="w-full btn text-white font-bold py-2 px-4 rounded mt-4">
                     <i class="fas fa-fast-forward mr-2"></i>Şimdi Tetikle
                 </button>
+                <button id="trigger-apod" class="w-full btn bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-4">
+                    <i class="fas fa-image mr-2"></i>Günün Astronomi Fotoğrafını Oluştur (Test)
+                </button>
             </div>
 
             <!-- Zamanlanmış Gönderiler -->
@@ -141,6 +144,22 @@
                 const result = await response.json();
                 if (response.ok) {
                     responseArea.innerHTML = `<div class="card p-4 text-green-400"><p><strong>Başlatıldı!</strong> Otomatik üretim süreci arka planda çalışmaya başladı. Sonuçları terminal loglarından veya bir süre sonra "Zamanlanmış Gönderiler" listesinden takip edebilirsiniz.</p></div>`;
+                } else {
+                    throw new Error(result.error || 'Bir hata oluştu.');
+                }
+            } catch (error) {
+                responseArea.innerHTML = `<div class="card p-4 text-red-400"><p><strong>Hata:</strong> ${error.message}</p></div>`;
+            }
+        });
+
+        document.getElementById('trigger-apod').addEventListener('click', async function() {
+            const responseArea = document.getElementById('response-area');
+            responseArea.innerHTML = '<p class="text-center text-blue-400">APOD içeriği tetikleniyor...</p>';
+            try {
+                const response = await fetch('/generate-apod', { method: 'POST' });
+                const result = await response.json();
+                if (response.ok) {
+                    responseArea.innerHTML = `<div class="card p-4 text-green-400"><p><strong>APOD Başlatıldı!</strong> İşlem arka planda çalışıyor. Logları kontrol edin.</p></div>`;
                 } else {
                     throw new Error(result.error || 'Bir hata oluştu.');
                 }

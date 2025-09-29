@@ -1473,6 +1473,24 @@ def generate_daily_content_endpoint():
     trigger_thread.start()
     return jsonify({"status": "success", "message": "Günlük içerik üretimi arka planda başlatıldı! Logları kontrol edin."}), 200
 
+@app.route('/generate-apod', methods=['POST'])
+def generate_apod_endpoint():
+    """
+    Sadece NASA APOD içeriğini test amaçlı tetikler.
+    """
+    logging.info("APOD test isteği alındı. Arka planda başlatılıyor...")
+    def _run():
+        try:
+            # En yakın saat için hemen zamanla
+            schedule_time = datetime.now().isoformat()
+            res = post_nasa_apod_logic(schedule_time=schedule_time)
+            logging.info(f"[APOD TEST] Tamamlandı. Sonuç: {res}")
+        except Exception as e:
+            logging.error(f"[APOD TEST] Hata: {e}")
+    trigger_thread = threading.Thread(target=_run)
+    trigger_thread.start()
+    return jsonify({"status": "success", "message": "APOD içeriği arka planda tetiklendi. Logları kontrol edin."}), 200
+
 def scheduler_loop():
     """
     Her 10 saniyede bir saati kontrol eden ve doğru zamanda ana görevi tetikleyen
