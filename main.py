@@ -540,41 +540,33 @@ def get_smart_schedule_times():
     return schedule_times
 
 
-def generate_and_post_logic(topic: str, schedule_time: str = None):
+def generate_and_post_logic(topic: str, source_articles: list, schedule_time: str = None):
     """
-    `generate_and_post` endpoint'inin ana mantığını içerir. Artık jsonify DÖNDÜRMÜYOR.
+    Verilen bir konu ve kaynak makaleler listesiyle içerik üretir ve yayınlar.
+    Artık kendi aramasını yapmıyor, hazır kaynakları kullanıyor.
     """
-    if not topic:
-        logging.error("HATA: Konu belirtilmedi.")
-        return
+    if not topic or not source_articles or len(source_articles) == 0:
+        logging.error(f"HATA: '{topic}' için kaynak makaleler bulunamadı veya boş.")
+        return False
+
+    # Kaynak makalelerin en az 2 tane olması gerekiyor
+    if len(source_articles) < 2:
+        logging.error(f"HATA: '{topic}' için yeterli kaynak makale bulunamadı (sadece {len(source_articles)} adet).")
+        return False
 
     try:
-        # 1. Adım: Konuyu İngilizce'ye çevir
-        logging.info(f"'{topic}' konusu İngilizce'ye çevriliyor...")
-        translation_prompt = f"Aşağıdaki Türkçe astronomi haber başlığını, Google'da en iyi sonuçları bulacak şekilde etkili bir İngilizce arama sorgusuna çevir. Sadece çevrilmiş sorguyu döndür, başka bir şey yazma.\n\nTÜRKÇE BAŞLIK: {topic}"
-        english_query = generate_content_with_gemini(translation_prompt).strip()
-        logging.info(f"İngilizce sorgu oluşturuldu: '{english_query}'")
+        # 1. Adım: Kaynakları metne dönüştür (Arama adımı kaldırıldı)
+        sources_text = "\n".join([f"- {article['title']}: {article['link']}" for article in source_articles])
 
-        # 2. Adım: Gemini'nin arama aracıyla araştırma yap
-        logging.info(f"'{english_query}' sorgusu için Gemini arama aracıyla son 24-48 saatte araştırma yapılıyor...")
-        search_results = search_google(english_query)
-        
-        if not search_results:
-            logging.info(f"'{english_query}' için son 24-48 saatte güncel sonuç bulunamadı. Konu atlanıyor.")
-            return False # Başarısız olduğunu belirtmek için False döndür
-
-        simplified_results = [{"title": item.get('title'), "link": item.get('link')} for item in search_results]
-        sources_text = "\n".join([f"- {result['title']}: {result['link']}" for result in simplified_results])
-
-        # 3. Adım: İçerik Üretme
-        logging.info("Arama sonuçları Gemini'ye gönderiliyor ve içerik üretiliyor...")
+        # 2. Adım: İçerik Üretme
+        logging.info("Hazır arama sonuçları Gemini'ye gönderiliyor ve içerik üretiliyor...")
 
         prompt = f"""
-        Sen, galaktikuzay.com için yazan, Neil deGrasse Tyson gibi karmaşık konuları basit ve heyecan verici bir dille anlatan bir bilim iletişimcisisin. Görevin, verilen konuyu analiz edip, SEO uyumlu, yapılandırılmış bir blog yazısı verisi oluşturmak.
+        Sen, galaktikuzay.com için yazan, Neil deGrasse Tyson gibi karmaşık konuları basit ve heyecan verici bir dille anlatan bir bilim iletişimcisisin. Görevin, verilen konuyu ve kaynakları analiz edip, SEO uyumlu, yapılandırılmış bir blog yazısı verisi oluşturmak.
 
-        **KONU:** {topic}
+        **ANA KONU:** {topic}
         
-        **KAYNAKLAR:**
+        **KULLANILACAK KAYNAKLAR (Bu kaynakların dışına çıkma):**
         {sources_text}
 
         **KESİN KURALLAR:**
@@ -641,9 +633,10 @@ def generate_and_post_logic(topic: str, schedule_time: str = None):
             kaynaklar = [line.strip() for line in parts[4].replace('[KAYNAKLAR]', '').strip().split('\n') if line.strip()]
 
         except (IndexError, ValueError):
-            return jsonify({"error": "Gemini'den gelen yanıt beklenilen formatta değil. Ayraçlar eksik olabilir."}), 500
+            logging.error(f"Gemini'den gelen yanıt '{topic}' için beklenilen formatta değil. Ayraçlar eksik olabilir.")
+            return False
 
-        # 4. Adım: AI ile 2 farklı görsel üret
+        # 3. Adım: AI ile 2 farklı görsel üret
         ai_image1_prompt = f"Bilimsel illüstrasyon, fotogerçekçi: {yazi_basligi}. Asla canlı hayvan çizme. Sadece uzay, gezegenler, astronomi ve bilim teması. Görselde hiç yazı olmasın, sadece görsel öğeler olsun."
         ai_image2_prompt = f"Sanatsal uzay illüstrasyonu: {yazi_basligi}. Farklı bir perspektif ve stil. Uzay, gezegenler, astronomi teması. Görselde hiç yazı olmasın, sadece görsel öğeler olsun."
         
@@ -684,7 +677,7 @@ def generate_and_post_logic(topic: str, schedule_time: str = None):
         if not featured_media_id_to_use:
             logging.warning(f"'{seo_baslik}' konusu için her iki AI görseli de üretilemedi. Yazı görsel olmadan yayınlanacak.")
 
-        # 5. Adım: Tamamen formatlanmış içeriği oluştur
+        # 4. Adım: Tamamen formatlanmış içeriği oluştur
         final_content = build_wordpress_content(
             title=yazi_basligi,
             main_content_parts=main_content_parts,
@@ -697,9 +690,9 @@ def generate_and_post_logic(topic: str, schedule_time: str = None):
             ai_image2_id=ai_media2_id
         )
 
-        # 6. Adım: WordPress'e gönder
+        # 5. Adım: WordPress'e gönder
         logging.info(f"'{seo_baslik}' başlıklı yazı WordPress'e gönderiliyor...")
-        post_details = post_to_wordpress(
+        post_to_wordpress(
             title=seo_baslik,
             content=final_content,
             featured_media_id=featured_media_id_to_use,
@@ -709,44 +702,39 @@ def generate_and_post_logic(topic: str, schedule_time: str = None):
 
         return True # Başarılı olduğunu belirtmek için True döndür
 
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-    except requests.exceptions.RequestException as e:
-        return jsonify({"error": f"WordPress'e gönderirken hata oluştu: {e}"}), 500
     except Exception as e:
-        return jsonify({"error": f"İşlem sırasında beklenmedik bir hata oluştu: {e}"}), 500
+        logging.error(f"'{topic}' işlenirken beklenmedik bir hata oluştu: {e}")
+        return False
 
 
-def generate_and_post_logic_with_context(topic: str, schedule_time_str: str = None):
+def generate_and_post_logic_with_context(topic: str, source_articles: list, schedule_time_str: str = None):
     """
     Flask uygulama bağlamı (app context) içinde generate_and_post_logic'i çalıştırır.
-    Zamanlayıcı tarafından çağrılmak için gereklidir.
+    Zamanlayıcı tarafından çağrılmak için gereklidir. Başarı durumunu (True/False) döndürür.
     """
     logging.info(f"[LOG] generate_and_post_logic_with_context BAŞLADI - Konu: {topic}")
+    success = False
     with app.app_context():
         final_schedule_time = None
         if schedule_time_str:
             final_schedule_time = datetime.fromisoformat(schedule_time_str).isoformat()
         else:
+            # Bu durum normalde yaşanmamalı ama bir yedek mekanizma
             now = datetime.now()
-            smart_times = get_smart_schedule_times()
-            for t in smart_times:
-                if datetime.fromisoformat(t) > now:
-                    final_schedule_time = t
-                    break
-            if not final_schedule_time:
-                final_schedule_time = (now + timedelta(days=1)).replace(hour=8, minute=45).isoformat()
+            final_schedule_time = (now + timedelta(hours=1)).isoformat()
         
         try:
-            # Mantık fonksiyonunu belirlenen zamanlama ile çağır
-            result = generate_and_post_logic(topic, schedule_time=final_schedule_time)
-            if result:
+            # Mantık fonksiyonunu belirlenen zamanlama ve kaynaklarla çağır
+            success = generate_and_post_logic(topic, source_articles=source_articles, schedule_time=final_schedule_time)
+            if success:
                 logging.info(f"BAŞARILI: '{topic}' konusu işlendi ve {final_schedule_time} tarihine zamanlandı.")
             else:
-                logging.warning(f"UYARI: '{topic}' konusu işlenemedi veya atlandı (örneğin, güncel kaynak bulunamadı).")
+                logging.warning(f"UYARI: '{topic}' konusu işlenemedi veya atlandı (örneğin, Gemini format hatası).")
         except Exception as e:
             logging.error(f"*** HATA: '{topic}' konusu işlenirken arka planda bir hata oluştu: {e} ***")
+            success = False
     logging.info(f"[LOG] generate_and_post_logic_with_context BİTTİ - Konu: {topic}")
+    return success
 
 
 def post_nasa_apod_logic(schedule_time: str = None):
@@ -992,8 +980,8 @@ def discover_trending_topics():
         
         # Sonuçları Gemini'ye gönder ve ilgi çekici konuları filtrele
         if all_results:
-            # Sadece ilk 10 sonucu Gemini'ye gönder, çok uzun olmaması için
-            news_items_text = "\n".join([f"- {item.get('title', '')}: {item.get('link', '')}" for item in all_results[:10]])
+            # Konu keşfi için tüm benzersiz sonuçları gönderelim
+            news_items_text = "\n".join([f"- {item.get('title', '')}: {item.get('link', '')}" for item in all_results])
             logging.info(f"Gemini'ye gönderilen ham arama sonuçları:\n{news_items_text}")
 
             criteria = """Seçim kriterleri:
@@ -1004,7 +992,7 @@ def discover_trending_topics():
             5. BİRBİRİNDEN TAMAMEN FARKLI KONULAR OLMALI - Aynı gezegen, aynı konu olmasın
             6. NASA APOD'dan FARKLI olmalı - Mars keşifleri, Perseverance, Curiosity gibi NASA APOD konuları seçme
             7. Çeşitlilik: Jüpiter, Satürn, kara delik, yıldız, galaksi, uzay teknolojisi, meteor yağmurları, exoplanet gibi farklı alanlar
-            8. Güncel haberler - son 24 saat içindeki gelişmeler"""
+            8. EN ÖNEMLİ KURAL: Konular KESİNLİKLE son 24 saat içindeki gelişmelere dayanmalıdır. 'on this day' gibi tarihi olaylar veya eski haberler KESİNLİKLE YASAKTIR."""
 
             topics_prompt = f"""Sen bir uzay ve astronomi içerik editörüsün. Aşağıdaki güncel haberleri analiz et ve galaktikuzay.com için en ilgi çekici 3 konuyu seç.
             
@@ -1030,13 +1018,17 @@ Sadece konu başlıklarını, her satırda bir tane olacak şekilde listele. Aç
                     clean_topics.append(topic)
             
             logging.info(f"Keşfedilen konular: {clean_topics}")
-            return clean_topics[:3]  # En fazla 3 konu döndür
+            # Dönen obje sadece konuları değil, kaynakları da içermeli
+            return {
+                "topics": clean_topics[:3],
+                "sources": all_results
+            }
         
-        return []
+        return None # Hiçbir şey bulunamadıysa None döndür
         
     except Exception as e:
         logging.error(f"Konu keşfi sırasında hata: {e}")
-        return []
+        return None
 
 
 def is_semantically_similar(new_topic: str, existing_titles: list) -> bool:
@@ -1118,8 +1110,15 @@ def trigger_daily_content_generation():
         
         # 3. Güncel konuları keşfet
         logging.info("\n=== 3/4: Güncel Konular Keşfediliyor ===\n")
-        trending_topics = discover_trending_topics()
+        discovery_result = discover_trending_topics()
         
+        trending_topics = []
+        all_found_articles = []
+
+        if discovery_result:
+            trending_topics = discovery_result.get("topics", [])
+            all_found_articles = discovery_result.get("sources", [])
+
         # 4. Benzersiz konulardan 3 içerik üret ve zamanla
         logging.info(f"\n=== 4/4: 3 Adet Benzersiz Konu İçin İçerik Üretimi Başlatılıyor ===\n")
         
@@ -1138,12 +1137,20 @@ def trigger_daily_content_generation():
 
             try:
                 post_schedule_time = schedule_times[published_google_posts + 1]
-                # Doğrudan fonksiyonu çağır ve zamanlama bilgisini gönder
-                generate_and_post_logic_with_context(topic, schedule_time_str=post_schedule_time)
+                # Konuyu ve TÜM bulunan kaynakları doğrudan fonksiyona geçir
+                logging.info(f"'{topic}' konusu için {len(all_found_articles)} adet kaynak makale kullanılacak.")
+                success = generate_and_post_logic_with_context(
+                    topic, 
+                    source_articles=all_found_articles, 
+                    schedule_time_str=post_schedule_time
+                )
                 
-                logging.info(f"\n--- Konu '{topic}' Başarıyla Zamanlandı: {post_schedule_time} ---\n")
-                published_google_posts += 1 # Başarılı yayın sayısını artır
-                existing_titles.append(topic) # Gelecek kontroller için listeye ekle
+                if success:
+                    logging.info(f"\n--- Konu '{topic}' Başarıyla Zamanlandı: {post_schedule_time} ---\n")
+                    published_google_posts += 1 # Başarılı yayın sayısını artır
+                    existing_titles.append(topic) # Gelecek kontroller için listeye ekle
+                else:
+                    logging.warning(f"'{topic}' konusu için içerik üretilemedi.")
 
             except Exception as e:
                 logging.error(f"\n*** HATA: Konu '{topic}' İşlenemedi: {e} ***\n")
