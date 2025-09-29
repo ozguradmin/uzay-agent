@@ -492,9 +492,10 @@ def get_nasa_apod():
         logging.error(f"NASA APOD API'sine bağlanırken hata oluştu: {e}")
         return None
 
-def post_to_wordpress(title: str, content: str, featured_media_id: int = None, meta_description: str = None, schedule_time: str = None):
+def post_to_wordpress(title: str, content: str, featured_media_id: int = None, meta_description: str = None, schedule_time: str = None, 
+                     meta_title: str = None, meta_keywords: str = None, tags: list = None, category_id: int = None):
     """
-    Verilen başlık ve içerikle WordPress'e bir yazı gönderir.
+    Verilen başlık ve içerikle WordPress'e SEO optimize edilmiş bir yazı gönderir.
     Eğer schedule_time verilirse, gönderiyi o tarihe zamanlar.
     """
     wp_url = os.getenv("WORDPRESS_URL")
@@ -511,19 +512,37 @@ def post_to_wordpress(title: str, content: str, featured_media_id: int = None, m
         'Authorization': f'Basic {token.decode("utf-8")}',
         'Content-Type': 'application/json'
     }
+    
     post_data = {
         "title": title,
         "content": content,
         "status": "draft" # Varsayılan olarak taslak olarak gönder
     }
     
+    # Featured Image
     if featured_media_id:
         post_data["featured_media"] = featured_media_id
     
+    # Kategori
+    if category_id:
+        post_data["categories"] = [category_id]
+    
+    # Tags
+    if tags:
+        post_data["tags"] = tags
+    
+    # SEO Meta verileri
+    meta_fields = {}
     if meta_description:
-        post_data["meta"] = {
-            "_yoast_wpseo_metadesc": meta_description
-        }
+        meta_fields["_yoast_wpseo_metadesc"] = meta_description
+    if meta_title:
+        meta_fields["_yoast_wpseo_title"] = meta_title
+    if meta_keywords:
+        meta_fields["_yoast_wpseo_focuskw"] = meta_keywords
+        meta_fields["_yoast_wpseo_keywords"] = meta_keywords
+    
+    if meta_fields:
+        post_data["meta"] = meta_fields
 
     if schedule_time:
         post_data['status'] = 'future'
@@ -604,8 +623,11 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
             Örnekler: "Mars'ta Yaşam İzi Bulundu!", "Jüpiter'in Büyük Kırmızı Lekesi Küçülüyor", "Uzayda Su Bulundu!", "Kara Delik Yıldızı Yuttu", "Ay'dan İlk Örnekler Geldi"
             Genel ifadeler kullanma: "NASA Açıkladı", "Bilim Haberi", "Harika bir görev", "Kozmik" gibi.
             Başlık doğrudan konuyu anlatsın, yapay zeka hissi vermesin.
-        2.  **Meta Açıklama:** 160 karakteri geçmeyen, anahtar kelimeleri içeren bir meta açıklama yaz.
-        3.  **Yazı Başlığı (H3):** İçerikte gösterilecek, daha sanatsal ve uzun bir başlık üret.
+        2.  **Meta Başlık:** 60 karakteri geçmeyen, SEO optimize edilmiş meta başlık (title tag).
+        3.  **Meta Açıklama:** 160 karakteri geçmeyen, anahtar kelimeleri içeren bir meta açıklama yaz.
+        4.  **Meta Anahtar Kelimeler:** Virgülle ayrılmış 5-8 adet anahtar kelime (örnek: "uzay, astronomi, NASA, keşif, bilim").
+        5.  **Etiketler:** Virgülle ayrılmış 3-5 adet etiket (örnek: "Uzay Keşfi, Astronomi, Bilim Haberleri").
+        6.  **Yazı Başlığı (H3):** İçerikte gösterilecek, daha sanatsal ve uzun bir başlık üret.
         4.  **İçerik Akışı:**
             *   YUKARIDAKİ KONUYU temel alarak, en az 400 kelimelik özgün bir metin oluştur.
             *   Metni `[H2]` etiketleriyle mantıksal alt başlıklara ayır.
@@ -648,10 +670,14 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
             title_fix_prompt = f"Aşağıdaki metinden sadece ana haber başlığını çıkar, başka hiçbir şey yazma. Eğer içinde 'görev', 'kozmik', 'pusula', 'anlatım', 'hazırım' gibi yorum kelimeleri varsa bunları kesinlikle at. Sadece net başlığı ver.\n\nMETİN: \"{raw_seo_baslik}\""
             seo_baslik = generate_content_with_gemini(title_fix_prompt).strip()
 
-            meta_aciklama = parts[1].replace('[META AÇIKLAMA]', '').strip()
-            yazi_basligi = parts[2].replace('[YAZI BAŞLIĞI]', '').strip()
+            # Yeni SEO alanları
+            meta_baslik = parts[1].replace('[META BAŞLIK]', '').strip() if len(parts) > 1 else seo_baslik
+            meta_aciklama = parts[2].replace('[META AÇIKLAMA]', '').strip() if len(parts) > 2 else ""
+            meta_keywords = parts[3].replace('[META ANAHTAR KELİMELER]', '').strip() if len(parts) > 3 else ""
+            etiketler = parts[4].replace('[ETİKETLER]', '').strip() if len(parts) > 4 else ""
+            yazi_basligi = parts[5].replace('[YAZI BAŞLIĞI]', '').strip() if len(parts) > 5 else seo_baslik
             
-            content_block = parts[3].replace('[İÇERİK]', '').strip()
+            content_block = parts[6].replace('[İÇERİK]', '').strip() if len(parts) > 6 else ""
             content_lines = content_block.split('\n')
             main_content_parts = []
             for line in content_lines:
@@ -660,7 +686,7 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
                 elif line.startswith('[P]'):
                     main_content_parts.append(('p', line.replace('[P]', '').strip()))
 
-            kaynaklar = [line.strip() for line in parts[4].replace('[KAYNAKLAR]', '').strip().split('\n') if line.strip()]
+            kaynaklar = [line.strip() for line in parts[7].replace('[KAYNAKLAR]', '').strip().split('\n') if line.strip()] if len(parts) > 7 else []
 
         except (IndexError, ValueError):
             logging.error(f"Gemini'den gelen yanıt '{topic}' için beklenilen formatta değil. Ayraçlar eksik olabilir.")
@@ -727,6 +753,9 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
             content=final_content,
             featured_media_id=featured_media_id_to_use,
             meta_description=meta_aciklama,
+            meta_title=meta_baslik,
+            meta_keywords=meta_keywords,
+            tags=[tag.strip() for tag in etiketler.split(',') if tag.strip()] if etiketler else [],
             schedule_time=schedule_time
         )
 
@@ -853,10 +882,14 @@ def post_nasa_apod_logic(schedule_time: str = None):
             title_fix_prompt = f"Aşağıdaki metinden sadece ana haber başlığını çıkar, başka hiçbir şey yazma. Eğer içinde 'görev', 'kozmik', 'pusula', 'anlatım', 'hazırım' gibi yorum kelimeleri varsa bunları kesinlikle at. Sadece net başlığı ver.\n\nMETİN: \"{raw_seo_baslik}\""
             seo_baslik = generate_content_with_gemini(title_fix_prompt).strip()
 
-            meta_aciklama = parts[1].replace('[META AÇIKLAMA]', '').strip()
-            yazi_basligi = parts[2].replace('[YAZI BAŞLIĞI]', '').strip()
+            # Yeni SEO alanları
+            meta_baslik = parts[1].replace('[META BAŞLIK]', '').strip() if len(parts) > 1 else seo_baslik
+            meta_aciklama = parts[2].replace('[META AÇIKLAMA]', '').strip() if len(parts) > 2 else ""
+            meta_keywords = parts[3].replace('[META ANAHTAR KELİMELER]', '').strip() if len(parts) > 3 else ""
+            etiketler = parts[4].replace('[ETİKETLER]', '').strip() if len(parts) > 4 else ""
+            yazi_basligi = parts[5].replace('[YAZI BAŞLIĞI]', '').strip() if len(parts) > 5 else seo_baslik
             
-            content_block = parts[3].replace('[İÇERİK]', '').strip()
+            content_block = parts[6].replace('[İÇERİK]', '').strip() if len(parts) > 6 else ""
             content_lines = content_block.split('\n')
             main_content_parts = []
             for line in content_lines:
@@ -865,7 +898,7 @@ def post_nasa_apod_logic(schedule_time: str = None):
                 elif line.startswith('[P]'):
                     main_content_parts.append(('p', line.replace('[P]', '').strip()))
 
-            kaynaklar = [line.strip() for line in parts[4].replace('[KAYNAKLAR]', '').strip().split('\n') if line.strip()]
+            kaynaklar = [line.strip() for line in parts[7].replace('[KAYNAKLAR]', '').strip().split('\n') if line.strip()] if len(parts) > 7 else []
 
         except (IndexError, ValueError):
             logging.error("Gemini'den gelen yanıt beklenilen formatta değil. Ayraçlar eksik olabilir.")
