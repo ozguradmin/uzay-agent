@@ -93,18 +93,47 @@ def test_wordpress_connection():
 def resolve_redirect_url(url: str):
     """
     Verilen bir URL'yi (özellikle Google'ın yönlendirme linklerini) takip ederek
-    nihai (gerçek) URL'yi bulur.
+    nihai (gerçek) URL'yi bulur. Daha güçlü hata kontrolü ve fallback mekanizması.
     """
-    if "vertexaisearch.cloud.google.com" in url:
+    if not url or len(url.strip()) == 0:
+        logging.warning("Boş URL verildi.")
+        return url
+    
+    # Google'ın yönlendirme linklerini kontrol et
+    if "vertexaisearch.cloud.google.com" in url or "google.com/search" in url or "google.com/url" in url:
         try:
-            # allow_redirects=True ile HEAD isteği yapmak, nihai URL'yi daha hızlı verir
-            response = requests.head(url, timeout=10, allow_redirects=True)
-            final_url = response.url
-            logging.info(f"Yönlendirme çözüldü: '{url}' -> '{final_url}'")
-            return final_url
+            # İlk önce HEAD isteği dene (daha hızlı)
+            response = requests.head(url, timeout=15, allow_redirects=True, 
+                                   headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
+            
+            if response.status_code == 200:
+                final_url = response.url
+                # Eğer final URL hala geçersiz görünüyorsa, GET isteği dene
+                if "google.com" in final_url and "search" in final_url:
+                    response = requests.get(url, timeout=15, allow_redirects=True,
+                                          headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
+                    final_url = response.url
+                
+                logging.info(f"Yönlendirme başarıyla çözüldü: '{url[:50]}...' -> '{final_url[:50]}...'")
+                return final_url
+            else:
+                logging.warning(f"HEAD isteği başarısız oldu (Status: {response.status_code}): {url}")
+                return url
+                
         except requests.RequestException as e:
-            logging.error(f"URL yönlendirmesi çözülürken hata: {url}, Hata: {e}")
-            return url # Hata durumunda orijinal URL'yi döndür
+            logging.error(f"URL yönlendirmesi çözülürken hata: {url[:50]}..., Hata: {e}")
+            # Hata durumunda orijinal URL'yi döndür ama logla
+            return url
+        except Exception as e:
+            logging.error(f"Beklenmedik hata URL yönlendirmesi sırasında: {e}")
+            return url
+    
+    # Normal URL'ler için doğrulama yap
+    if url.startswith(('http://', 'https://')):
+        return url
+    
+    # Geçersiz URL formatı
+    logging.warning(f"Geçersiz URL formatı: {url}")
     return url
 
 def search_google(query: str, num_results: int = 10):
@@ -961,7 +990,22 @@ def discover_trending_topics():
             "astrophysics news today",
             "space science latest breakthroughs",
             "current events in space",
-            "universe news recent"
+            "universe news recent",
+            "meteor shower news today",
+            "space weather alerts recent",
+            "international space station news",
+            "mars rover updates latest",
+            "jupiter discoveries recent",
+            "saturn discoveries new",
+            "space telescope findings today",
+            "cosmic ray discoveries recent",
+            "nebula discoveries latest",
+            "star formation news recent",
+            "space launch news today",
+            "planetary science breakthroughs",
+            "space debris news recent",
+            "solar flare news today",
+            "comet discoveries recent"
         ]
         
         all_results = []
@@ -1207,8 +1251,8 @@ def scheduler_loop():
     logging.info("Sağlam Zamanlayıcı Döngüsü Başlatıldı.")
     while True:
         now = datetime.now()
-        # Her gün 08:45'te çalıştır
-        if now.hour == 8 and now.minute == 45:
+        # Her gün 03:42'de çalıştır
+        if now.hour == 3 and now.minute == 42:
             logging.info("Zaman geldi! Otomatik içerik üretimi tetikleniyor...")
             # Ana görevi ayrı bir thread'de başlat ki ana döngüyü bloklamasın
             trigger_thread = threading.Thread(target=trigger_daily_content_generation)
