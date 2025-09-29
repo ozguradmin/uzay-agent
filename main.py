@@ -1400,9 +1400,9 @@ def trigger_daily_content_generation():
                 )
                 
                 if success:
-                logging.info(f"\n--- Konu '{topic}' Başarıyla Zamanlandı: {post_schedule_time} ---\n")
-                published_google_posts += 1 # Başarılı yayın sayısını artır
-                existing_titles.append(topic) # Gelecek kontroller için listeye ekle
+                    logging.info(f"\n--- Konu '{topic}' Başarıyla Zamanlandı: {post_schedule_time} ---\n")
+                    published_google_posts += 1 # Başarılı yayın sayısını artır
+                    existing_titles.append(topic) # Gelecek kontroller için listeye ekle
                 else:
                     logging.warning(f"'{topic}' konusu için içerik üretilemedi.")
 
@@ -1473,10 +1473,10 @@ def scheduler_loop():
         
         # Her 5 dakikada bir zamanlayıcının çalıştığını logla (daha sık ping için)
         if now.minute % 5 == 0 and now.second < 10:
-            logging.info(f"Zamanlayıcı aktif - Şu anki zaman: {now.strftime('%H:%M:%S')} - Hedef zaman: 13:12")
+            logging.info(f"Zamanlayıcı aktif - Şu anki zaman: {now.strftime('%H:%M:%S')} - Hedef zaman: 13:15")
         
-        # Her gün 13:12'de çalıştır (AMA sadece bir kez!)
-        if now.hour == 13 and now.minute == 12:
+        # Her gün 13:15'de çalıştır (AMA sadece bir kez!)
+        if now.hour == 13 and now.minute == 15:
             # Bugün daha önce çalıştı mı kontrol et
             if last_execution_date != current_date:
                 logging.info("Zaman geldi! Otomatik içerik üretimi tetikleniyor...")
@@ -1485,7 +1485,7 @@ def scheduler_loop():
                 trigger_thread.start()
                 # Bugün çalıştığını işaretle
                 last_execution_date = current_date
-                logging.info(f"Günlük işlem tamamlandı. Bir sonraki çalışma: {(now + timedelta(days=1)).strftime('%Y-%m-%d 13:12')}")
+                logging.info(f"Günlük işlem tamamlandı. Bir sonraki çalışma: {(now + timedelta(days=1)).strftime('%Y-%m-%d 13:15')}")
                 # Görevin aynı dakika içinde tekrar tetiklenmemesi için 61 saniye bekle
                 time.sleep(61)
             else:
