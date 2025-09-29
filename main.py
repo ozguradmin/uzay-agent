@@ -560,12 +560,14 @@ def ensure_tag_ids(tag_names: list) -> list:
     credentials = f"{wp_user}:{wp_password}"
     token = base64.b64encode(credentials.encode())
     headers = {
-        'Authorization': f'Basic {token.decode("utf-8")}',
-        'Content-Disposition': f'attachment; filename="{image_name}"'
+        'Authorization': f'Basic {token.decode("utf-8")}'
     }
 
     try:
-        upload_response = requests.post(media_api_url, headers=headers, data=optimized_image_data, timeout=60)
+        files = {
+            'file': (image_name, optimized_image_data, 'image/jpeg')
+        }
+        upload_response = requests.post(media_api_url, headers=headers, files=files, timeout=60)
         upload_response.raise_for_status()
         media_data = upload_response.json()
         logging.info(f"Görsel başarıyla yüklendi. Media ID: {media_data['id']}")
@@ -867,7 +869,7 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
 
         # 5. Adım: WordPress'e gönder
         logging.info(f"'{seo_baslik}' başlıklı yazı WordPress'e gönderiliyor...")
-        post_to_wordpress(
+        post_details = post_to_wordpress(
             title=seo_baslik,
             content=final_content,
             featured_media_id=featured_media_id_to_use,
@@ -877,6 +879,7 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
             tags=[tag.strip() for tag in etiketler.split(',') if tag.strip()] if etiketler else [],
             schedule_time=schedule_time
         )
+        logging.info(f"BAŞARILI: Google içerik gönderildi. Post ID: {post_details.get('id')}, featured_media_id: {featured_media_id_to_use}")
 
         return True # Başarılı olduğunu belirtmek için True döndür
 
@@ -1034,7 +1037,10 @@ def post_nasa_apod_logic(schedule_time: str = None):
 
         # 3. Adım: Görseli WordPress'e yükle
         logging.info(f"'{seo_baslik}' başlıklı görsel WordPress'e yükleniyor...")
-        media_info = upload_image_to_wordpress(title=seo_baslik, image_url=apod_data['hdurl'])
+        # hdurl yoksa url anahtarını dene
+        image_source_url = apod_data.get('hdurl') or apod_data.get('url')
+        logging.info(f"APOD görsel kaynağı seçildi: {'hdurl' if apod_data.get('hdurl') else 'url'} -> {image_source_url}")
+        media_info = upload_image_to_wordpress(title=seo_baslik, image_url=image_source_url)
         if not media_info:
             logging.error("NASA görseli WordPress'e yüklenemedi.")
             return jsonify({"error": "NASA görseli WordPress'e yüklenemedi."}), 500
@@ -1085,7 +1091,7 @@ def post_nasa_apod_logic(schedule_time: str = None):
         final_title = f"Günün Astronomi Fotoğrafı ({today_date}): {seo_baslik}"  # Günün astronomi fotoğrafı ve tarih ekle
         logging.info(f"'{final_title}' başlıklı yazı WordPress'e gönderiliyor...")
         post_details = post_to_wordpress(final_title, final_content, featured_media_id=media_id, meta_description=meta_aciklama, schedule_time=schedule_time)
-        logging.info(f"BAŞARILI: NASA APOD içeriği gönderildi. Post ID: {post_details.get('id')}")
+        logging.info(f"BAŞARILI: NASA APOD içeriği gönderildi. Post ID: {post_details.get('id')}, featured_media_id: {media_id}")
         return True # Başarılı olduğunu belirtmek için True döndür
     
     except ValueError as e:
@@ -1433,10 +1439,10 @@ def scheduler_loop():
         
         # Her 5 dakikada bir zamanlayıcının çalıştığını logla (daha sık ping için)
         if now.minute % 5 == 0 and now.second < 10:
-            logging.info(f"Zamanlayıcı aktif - Şu anki zaman: {now.strftime('%H:%M:%S')} - Hedef zaman: 12:08")
+            logging.info(f"Zamanlayıcı aktif - Şu anki zaman: {now.strftime('%H:%M:%S')} - Hedef zaman: 12:40")
         
-        # Her gün 12:08'de çalıştır (AMA sadece bir kez!)
-        if now.hour == 12 and now.minute == 8:
+        # Her gün 12:40'ta çalıştır (AMA sadece bir kez!)
+        if now.hour == 12 and now.minute == 40:
             # Bugün daha önce çalıştı mı kontrol et
             if last_execution_date != current_date:
                 logging.info("Zaman geldi! Otomatik içerik üretimi tetikleniyor...")
@@ -1445,7 +1451,7 @@ def scheduler_loop():
                 trigger_thread.start()
                 # Bugün çalıştığını işaretle
                 last_execution_date = current_date
-                logging.info(f"Günlük işlem tamamlandı. Bir sonraki çalışma: {(now + timedelta(days=1)).strftime('%Y-%m-%d 12:08')}")
+                logging.info(f"Günlük işlem tamamlandı. Bir sonraki çalışma: {(now + timedelta(days=1)).strftime('%Y-%m-%d 12:40')}")
                 # Görevin aynı dakika içinde tekrar tetiklenmemesi için 61 saniye bekle
                 time.sleep(61)
             else:
