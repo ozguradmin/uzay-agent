@@ -432,6 +432,44 @@ def upload_image_to_wordpress(title: str, image_url: str = None, image_data: byt
         logging.error("Yüklenecek görsel verisi bulunamadı.")
         return None
 
+
+def ensure_tag_ids(tag_names: list) -> list:
+    """
+    Verilen etiket isimlerini WordPress'te ID'lere çözümler. Yoksa oluşturur.
+    """
+    if not tag_names:
+        return []
+
+    wp_url = os.getenv("WORDPRESS_URL")
+    wp_user = os.getenv("WORDPRESS_USER")
+    wp_password = os.getenv("WORDPRESS_APP_PASSWORD")
+
+    credentials = f"{wp_user}:{wp_password}"
+    token = base64.b64encode(credentials.encode()).decode("utf-8")
+    headers = { 'Authorization': f'Basic {token}', 'Content-Type': 'application/json' }
+
+    tag_ids = []
+    for name in tag_names:
+        name = name.strip()
+        if not name:
+            continue
+        try:
+            # Önce mevcut etiketi ara
+            search_url = f"{wp_url.rstrip('/')}/wp-json/wp/v2/tags"
+            resp = requests.get(search_url, headers=headers, params={"search": name, "per_page": 100}, timeout=20)
+            resp.raise_for_status()
+            matches = [t for t in resp.json() if t.get('name', '').lower() == name.lower()]
+            if matches:
+                tag_ids.append(matches[0]['id'])
+                continue
+            # Yoksa oluştur
+            create_resp = requests.post(search_url, headers=headers, json={"name": name}, timeout=20)
+            create_resp.raise_for_status()
+            tag_ids.append(create_resp.json()['id'])
+        except Exception as e:
+            logging.warning(f"Etiket oluşturma/arama hatası ('{name}'): {e}")
+    return tag_ids
+
     # Pillow ile görsel optimizasyonu
     try:
         img = Image.open(BytesIO(image_content))
@@ -527,29 +565,31 @@ def post_to_wordpress(title: str, content: str, featured_media_id: int = None, m
     if category_id:
         post_data["categories"] = [category_id]
     
-    # Tags
+    # Tags: İSİMLERİ ID'ye çevirerek gönder
     if tags:
-        post_data["tags"] = tags
-    
-    # SEO Meta verileri
-    meta_fields = {}
+        try:
+            tag_ids = ensure_tag_ids(tags)
+            if tag_ids:
+                post_data["tags"] = tag_ids
+        except Exception as e:
+            logging.warning(f"Etiket ID çözümlemede sorun: {e}. Etiketler atlanacak.")
+
+    # Yoast özel meta alanlarını REST üzerinden gönderme; çoğu kurulumda reddedilir.
+    # Bunun yerine özet alanını (excerpt) dolduralım.
     if meta_description:
-        meta_fields["_yoast_wpseo_metadesc"] = meta_description
-    if meta_title:
-        meta_fields["_yoast_wpseo_title"] = meta_title
-    if meta_keywords:
-        meta_fields["_yoast_wpseo_focuskw"] = meta_keywords
-        meta_fields["_yoast_wpseo_keywords"] = meta_keywords
-    
-    if meta_fields:
-        post_data["meta"] = meta_fields
+        post_data["excerpt"] = meta_description[:250]
 
     if schedule_time:
         post_data['status'] = 'future'
         post_data['date'] = schedule_time
 
     response = requests.post(api_url, headers=headers, json=post_data, timeout=30)
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        logging.error(f"WordPress post hatası: {e}")
+        logging.error(f"WP Yanıtı: {response.status_code} - {response.text}")
+        raise
     return response.json()
 
 
@@ -641,8 +681,17 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
         [SEO BAŞLIK]
         (SEO başlığı)
         [---]
+        [META BAŞLIK]
+        (Meta başlık)
+        [---]
         [META AÇIKLAMA]
         (Meta açıklama)
+        [---]
+        [META ANAHTAR KELİMELER]
+        (Virgülle ayrılmış anahtar kelimeler)
+        [---]
+        [ETİKETLER]
+        (Virgülle ayrılmış etiketler)
         [---]
         [YAZI BAŞLIĞI]
         (Sanatsal H3 başlığı)
@@ -853,8 +902,17 @@ def post_nasa_apod_logic(schedule_time: str = None):
         [SEO BAŞLIK]
         (SEO başlığı)
         [---]
+        [META BAŞLIK]
+        (Meta başlık)
+        [---]
         [META AÇIKLAMA]
         (Meta açıklama)
+        [---]
+        [META ANAHTAR KELİMELER]
+        (Virgülle ayrılmış anahtar kelimeler)
+        [---]
+        [ETİKETLER]
+        (Virgülle ayrılmış etiketler)
         [---]
         [YAZI BAŞLIĞI]
         (Sanatsal H3 başlığı)
@@ -928,6 +986,14 @@ def post_nasa_apod_logic(schedule_time: str = None):
             if ai_media_info and ai_media_info.get('url'):
                 ai_media_url = ai_media_info.get('url')
                 ai_media_id = ai_media_info.get('id')
+
+        # Eğer içerik boş geldiyse, NASA açıklamasından minimal içerik üret (fallback)
+        if not main_content_parts:
+            logging.warning("APOD için Gemini içerik bloğu boş geldi. NASA açıklamasından içerik oluşturuluyor (fallback).")
+            main_content_parts = [
+                ('h2', 'Fotoğrafın Bilimsel Bağlamı'),
+                ('p', ingilizce_aciklama[:900])
+            ]
 
         # 5. Adım: Tamamen formatlanmış içeriği oluştur
         final_content = build_wordpress_content(
@@ -1297,10 +1363,10 @@ def scheduler_loop():
         
         # Her 5 dakikada bir zamanlayıcının çalıştığını logla (daha sık ping için)
         if now.minute % 5 == 0 and now.second < 10:
-            logging.info(f"Zamanlayıcı aktif - Şu anki zaman: {now.strftime('%H:%M:%S')} - Hedef zaman: 08:45")
+            logging.info(f"Zamanlayıcı aktif - Şu anki zaman: {now.strftime('%H:%M:%S')} - Hedef zaman: 11:32")
         
-        # Her gün 08:45'te çalıştır (AMA sadece bir kez!)
-        if now.hour == 8 and now.minute == 45:
+        # Her gün 11:32'de çalıştır (AMA sadece bir kez!)
+        if now.hour == 11 and now.minute == 32:
             # Bugün daha önce çalıştı mı kontrol et
             if last_execution_date != current_date:
                 logging.info("Zaman geldi! Otomatik içerik üretimi tetikleniyor...")
@@ -1309,7 +1375,7 @@ def scheduler_loop():
                 trigger_thread.start()
                 # Bugün çalıştığını işaretle
                 last_execution_date = current_date
-                logging.info(f"Günlük işlem tamamlandı. Bir sonraki çalışma: {(now + timedelta(days=1)).strftime('%Y-%m-%d 04:15')}")
+                logging.info(f"Günlük işlem tamamlandı. Bir sonraki çalışma: {(now + timedelta(days=1)).strftime('%Y-%m-%d 11:32')}")
                 # Görevin aynı dakika içinde tekrar tetiklenmemesi için 61 saniye bekle
                 time.sleep(61)
             else:
