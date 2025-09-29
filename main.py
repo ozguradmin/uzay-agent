@@ -1246,30 +1246,42 @@ def generate_daily_content_endpoint():
 
 def scheduler_loop():
     """
-    Her 60 saniyede bir saati kontrol eden ve doğru zamanda ana görevi tetikleyen
-    basit ve güvenilir zamanlayıcı döngüsü.
+    Her 10 saniyede bir saati kontrol eden ve doğru zamanda ana görevi tetikleyen
+    basit ve güvenilir zamanlayıcı döngüsü. Günlük tekrar çalışmayı önler.
     """
     logging.info("Sağlam Zamanlayıcı Döngüsü Başlatıldı.")
     
     # Türkiye saat dilimini ayarla
     turkey_tz = pytz.timezone('Europe/Istanbul')
     
+    # Günlük çalışma kontrolü için
+    last_execution_date = None
+    
     while True:
         # Türkiye saatini kullan
         now = datetime.now(turkey_tz)
+        current_date = now.date()  # Sadece tarih kısmı (YYYY-MM-DD)
         
         # Her 5 dakikada bir zamanlayıcının çalıştığını logla (daha sık ping için)
         if now.minute % 5 == 0 and now.second < 10:
-            logging.info(f"Zamanlayıcı aktif - Şu anki zaman: {now.strftime('%H:%M:%S')} - Hedef zaman: 04:05")
+            logging.info(f"Zamanlayıcı aktif - Şu anki zaman: {now.strftime('%H:%M:%S')} - Hedef zaman: 04:15")
         
-        # Her gün 04:05'te çalıştır
-        if now.hour == 4 and now.minute == 5:
-            logging.info("Zaman geldi! Otomatik içerik üretimi tetikleniyor...")
-            # Ana görevi ayrı bir thread'de başlat ki ana döngüyü bloklamasın
-            trigger_thread = threading.Thread(target=trigger_daily_content_generation)
-            trigger_thread.start()
-            # Görevin aynı dakika içinde tekrar tetiklenmemesi için 61 saniye bekle
-            time.sleep(61)
+        # Her gün 04:15'te çalıştır (AMA sadece bir kez!)
+        if now.hour == 4 and now.minute == 15:
+            # Bugün daha önce çalıştı mı kontrol et
+            if last_execution_date != current_date:
+                logging.info("Zaman geldi! Otomatik içerik üretimi tetikleniyor...")
+                # Ana görevi ayrı bir thread'de başlat ki ana döngüyü bloklamasın
+                trigger_thread = threading.Thread(target=trigger_daily_content_generation)
+                trigger_thread.start()
+                # Bugün çalıştığını işaretle
+                last_execution_date = current_date
+                logging.info(f"Günlük işlem tamamlandı. Bir sonraki çalışma: {(now + timedelta(days=1)).strftime('%Y-%m-%d 04:15')}")
+                # Görevin aynı dakika içinde tekrar tetiklenmemesi için 61 saniye bekle
+                time.sleep(61)
+            else:
+                # Bugün zaten çalıştı, sadece 10 saniye bekle
+                time.sleep(10)
         else:
             # Bir sonraki kontrol için 10 saniye bekle (daha sık ping için)
             time.sleep(10)
