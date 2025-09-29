@@ -1683,10 +1683,10 @@ def scheduler_loop():
         
         # Her 5 dakikada bir zamanlayıcının çalıştığını logla (daha sık ping için)
         if now.minute % 5 == 0 and now.second < 10:
-            logging.info(f"Zamanlayıcı aktif - Şu anki zaman: {now.strftime('%H:%M:%S')} - Hedef zaman: 19:32")
+            logging.info(f"Zamanlayıcı aktif - Şu anki zaman: {now.strftime('%H:%M:%S')} - Hedef zaman: 20:00")
         
-        # Her gün 19:32'de çalıştır (AMA sadece bir kez!)
-        if now.hour == 19 and now.minute == 32:
+        # Her gün 20:00'da çalıştır (AMA sadece bir kez!)
+        if now.hour == 20 and now.minute == 0:
             # Bugün daha önce çalıştı mı kontrol et
             if last_execution_date != current_date:
                 logging.info("Zaman geldi! Otomatik içerik üretimi tetikleniyor...")
