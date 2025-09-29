@@ -756,8 +756,11 @@ def post_to_wordpress(title: str, content: str, featured_media_id: int = None, m
 
     # Yoast özel meta alanlarını REST üzerinden gönderme; çoğu kurulumda reddedilir.
     # Bunun yerine özet alanını (excerpt) dolduralım.
+    if meta_title:
+        post_data["title"] = meta_title  # Use meta_title directly for focus keyphrase
+
     if meta_description:
-        post_data["excerpt"] = meta_description[:250]
+        post_data["excerpt"] = meta_description[:155] # Use excerpt for meta description (Yoast SEO reads from excerpt)
 
     if schedule_time:
         post_data['status'] = 'future'
@@ -844,11 +847,16 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
             Örnekler: "Mars'ta Yaşam İzi Bulundu!", "Jüpiter'in Büyük Kırmızı Lekesi Küçülüyor", "Uzayda Su Bulundu!", "Kara Delik Yıldızı Yuttu", "Ay'dan İlk Örnekler Geldi"
             Genel ifadeler kullanma: "NASA Açıkladı", "Bilim Haberi", "Harika bir görev", "Kozmik" gibi.
             Başlık doğrudan konuyu anlatsın, yapay zeka hissi vermesin.
-        2.  **Meta Başlık:** 60 karakteri geçmeyen, SEO optimize edilmiş meta başlık (title tag).
-        3.  **Meta Açıklama:** 160 karakteri geçmeyen, anahtar kelimeleri içeren bir meta açıklama yaz.
+        2.  **Meta Başlık:** 60 karakteri geçmeyen, SEO optimize edilmiş meta başlık (title tag). Odak anahtar kelimeyi içermeli.
+        3.  **Meta Açıklama:** 155 karakteri geçmeyen, odak anahtar kelimeyi içeren bir meta açıklama yaz.
         4.  **Meta Anahtar Kelimeler:** Virgülle ayrılmış 5-8 adet anahtar kelime (örnek: "uzay, astronomi, NASA, keşif, bilim").
         5.  **Etiketler:** Virgülle ayrılmış 3-5 adet etiket (örnek: "Uzay Keşfi, Astronomi, Bilim Haberleri").
         6.  **Yazı Başlığı (H3):** İçerikte gösterilecek, daha sanatsal ve uzun bir başlık üret.
+        7.  **SEO YAZIM KURALLARI:**
+            - Her cümle maksimum 15 kelime olsun
+            - Edilgen çatı kullanma, etken çatı tercih et (örn: "NASA keşfetti" yerine "Keşif yapıldı")
+            - Paragraflar 2-3 cümle olsun
+            - Odak anahtar kelimeyi giriş paragrafında kullan
         4.  **İçerik Akışı:**
             *   YUKARIDAKİ KONUYU temel alarak, en az 400 kelimelik özgün bir metin oluştur.
             *   Metni `[H2]` etiketleriyle mantıksal alt başlıklara ayır.
