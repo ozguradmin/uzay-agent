@@ -5,7 +5,8 @@ import requests
 import base64
 from flask import request
 from googleapiclient.discovery import build
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
+import pytz
 import re
 from PIL import Image
 from io import BytesIO
@@ -1249,8 +1250,13 @@ def scheduler_loop():
     basit ve güvenilir zamanlayıcı döngüsü.
     """
     logging.info("Sağlam Zamanlayıcı Döngüsü Başlatıldı.")
+    
+    # Türkiye saat dilimini ayarla
+    turkey_tz = pytz.timezone('Europe/Istanbul')
+    
     while True:
-        now = datetime.now()
+        # Türkiye saatini kullan
+        now = datetime.now(turkey_tz)
         
         # Her 5 dakikada bir zamanlayıcının çalıştığını logla (daha sık ping için)
         if now.minute % 5 == 0 and now.second < 10:
