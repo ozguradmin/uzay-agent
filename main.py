@@ -993,18 +993,12 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
                     paragraph_text = line.replace('[P]', '').strip()
                     if not inserted_intro:
                         # İlk paragrafın başına SEO başlığını anahtar ifade olarak ekle
-                        paragraph_text = f"{seo_baslik}. {paragraph_text} [Dahili Link](https://galaktikuzay.com/kategori/haberler/)"
+                        paragraph_text = f"{seo_baslik}. {paragraph_text}"
                         inserted_intro = True
                     main_content_parts.append(('p', paragraph_text))
 
             kaynaklar = [line.strip() for line in parts[7].replace('[KAYNAKLAR]', '').strip().split('\n') if line.strip()] if len(parts) > 7 else []
-            # Ek bir dahili linki son paragrafa ekleyelim
-            if main_content_parts:
-                for idx in range(len(main_content_parts)-1, -1, -1):
-                    if main_content_parts[idx][0] == 'p':
-                        last_p = main_content_parts[idx][1]
-                        main_content_parts[idx] = ('p', f"{last_p} [Dahili Link](https://galaktikuzay.com/kategori/ilginc-bilgiler/)")
-                        break
+            # Dahili linkler kaldırıldı - artık eklenmeyecek
 
         except (IndexError, ValueError):
             logging.error(f"Gemini'den gelen yanıt '{topic}' için beklenilen formatta değil. Ayraçlar eksik olabilir.")
@@ -1375,28 +1369,28 @@ def discover_trending_topics():
     Google'da güncel uzay ve astronomi konularını arar ve ilgi çekici konular bulur.
     """
     try:
-        # Güncel uzay konuları için arama terimleri - İngilizce + çeşitli ve viral
+        # Güncel uzay konuları için arama terimleri (1-2 kelimelik kısa terimler)
         search_terms = [
-            "latest space news today",
-            "recent astronomy discoveries",
-            "new exoplanet discoveries",
-            "NASA mission updates latest",
-            "ESA space news recent",
-            "cutting-edge space technology breakthroughs",
-            "black hole discoveries recent",
-            "galaxy evolution latest research",
-            "cosmic phenomena breaking news",
-            "solar system recent observations",
-            "space exploration recent findings",
-            "astrophysics news today",
-            "space science latest breakthroughs",
-            "current events in space",
-            "universe news recent",
-            "meteor shower news today",
-            "space weather alerts recent",
-            "international space station news",
-            "mars rover updates latest",
-            "jupiter discoveries recent",
+            "meteor shower",
+            "space",
+            "nasa",
+            "exoplanet", 
+            "spacex",
+            "meteor",
+            "black hole",
+            "mars",
+            "james webb",
+            "satellite",
+            "rocket",
+            "astronomy",
+            "galaxy",
+            "star",
+            "telescope",
+            "solar",
+            "aurora",
+            "space weather",
+            "mission",
+            "discovery",
             "saturn discoveries new",
             "space telescope findings today",
             "cosmic ray discoveries recent",
@@ -1683,10 +1677,10 @@ def scheduler_loop():
         
         # Her 5 dakikada bir zamanlayıcının çalıştığını logla (daha sık ping için)
         if now.minute % 5 == 0 and now.second < 10:
-            logging.info(f"Zamanlayıcı aktif - Şu anki zaman: {now.strftime('%H:%M:%S')} - Hedef zaman: 20:10")
+            logging.info(f"Zamanlayıcı aktif - Şu anki zaman: {now.strftime('%H:%M:%S')} - Hedef zaman: 08:45")
         
-        # Her gün 20:10'da çalıştır (AMA sadece bir kez!)
-        if now.hour == 20 and now.minute == 10:
+        # Her gün 08:45'te çalıştır (AMA sadece bir kez!)
+        if now.hour == 8 and now.minute == 45:
             # Bugün daha önce çalıştı mı kontrol et
             if last_execution_date != current_date:
                 logging.info("Zaman geldi! Otomatik içerik üretimi tetikleniyor...")
