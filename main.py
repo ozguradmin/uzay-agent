@@ -809,26 +809,26 @@ def generate_and_post_logic(topic: str, source_articles: list, schedule_time: st
             content_block = parts[6].replace('[İÇERİK]', '').strip() if len(parts) > 6 else ""
             content_lines = content_block.split('\n')
             main_content_parts = []
-        inserted_intro = False
-        for line in content_lines:
-            if line.startswith('[H2]'):
-                main_content_parts.append(('h2', line.replace('[H2]', '').strip()))
-            elif line.startswith('[P]'):
-                paragraph_text = line.replace('[P]', '').strip()
-                if not inserted_intro:
-                    # İlk paragrafın başına SEO başlığını anahtar ifade olarak ekle
-                    paragraph_text = f"{seo_baslik}. {paragraph_text} [Dahili Link](https://galaktikuzay.com/kategori/haberler/)"
-                    inserted_intro = True
-                main_content_parts.append(('p', paragraph_text))
+            inserted_intro = False
+            for line in content_lines:
+                if line.startswith('[H2]'):
+                    main_content_parts.append(('h2', line.replace('[H2]', '').strip()))
+                elif line.startswith('[P]'):
+                    paragraph_text = line.replace('[P]', '').strip()
+                    if not inserted_intro:
+                        # İlk paragrafın başına SEO başlığını anahtar ifade olarak ekle
+                        paragraph_text = f"{seo_baslik}. {paragraph_text} [Dahili Link](https://galaktikuzay.com/kategori/haberler/)"
+                        inserted_intro = True
+                    main_content_parts.append(('p', paragraph_text))
 
-        kaynaklar = [line.strip() for line in parts[7].replace('[KAYNAKLAR]', '').strip().split('\n') if line.strip()] if len(parts) > 7 else []
-        # Ek bir dahili linki son paragrafa ekleyelim
-        if main_content_parts:
-            for idx in range(len(main_content_parts)-1, -1, -1):
-                if main_content_parts[idx][0] == 'p':
-                    last_p = main_content_parts[idx][1]
-                    main_content_parts[idx] = ('p', f"{last_p} [Dahili Link](https://galaktikuzay.com/kategori/ilginc-bilgiler/)")
-                    break
+            kaynaklar = [line.strip() for line in parts[7].replace('[KAYNAKLAR]', '').strip().split('\n') if line.strip()] if len(parts) > 7 else []
+            # Ek bir dahili linki son paragrafa ekleyelim
+            if main_content_parts:
+                for idx in range(len(main_content_parts)-1, -1, -1):
+                    if main_content_parts[idx][0] == 'p':
+                        last_p = main_content_parts[idx][1]
+                        main_content_parts[idx] = ('p', f"{last_p} [Dahili Link](https://galaktikuzay.com/kategori/ilginc-bilgiler/)")
+                        break
 
         except (IndexError, ValueError):
             logging.error(f"Gemini'den gelen yanıt '{topic}' için beklenilen formatta değil. Ayraçlar eksik olabilir.")
@@ -933,7 +933,7 @@ def generate_and_post_logic_with_context(topic: str, source_articles: list, sche
             # Mantık fonksiyonunu belirlenen zamanlama ve kaynaklarla çağır
             success = generate_and_post_logic(topic, source_articles=source_articles, schedule_time=final_schedule_time)
             if success:
-            logging.info(f"BAŞARILI: '{topic}' konusu işlendi ve {final_schedule_time} tarihine zamanlandı.")
+                logging.info(f"BAŞARILI: '{topic}' konusu işlendi ve {final_schedule_time} tarihine zamanlandı.")
             else:
                 logging.warning(f"UYARI: '{topic}' konusu işlenemedi veya atlandı (örneğin, Gemini format hatası).")
         except Exception as e:
@@ -1126,7 +1126,7 @@ def post_nasa_apod_logic(schedule_time: str = None):
         logging.error(f"İşlem sırasında beklenmedik bir hata oluştu: {e}")
         return None
     finally:
-    logging.info("[LOG] post_nasa_apod_logic BİTTİ")
+        logging.info("[LOG] post_nasa_apod_logic BİTTİ")
 
 
 def get_wordpress_posts(limit=100):
@@ -1338,17 +1338,17 @@ def trigger_daily_content_generation():
         if apod_already_posted:
             logging.info(f"'{expected_apod_title_prefix}' başlıklı APOD yazısı bugün zaten yayınlanmış. Bu adım atlanıyor.")
         else:
-        try:
-            logging.info(f"NASA APOD için 'post_nasa_apod_logic' çağrılıyor. Zaman: {schedule_times[0]}")
-            result = post_nasa_apod_logic(schedule_time=schedule_times[0])
-            if result:
-                logging.info(f"NASA APOD içeriği başarıyla oluşturuldu ve {schedule_times[0]} tarihine zamanlandı.")
-            else:
-                logging.warning(f"NASA APOD içeriği oluşturulamadı veya atlandı. Zaman: {schedule_times[0]}")
-        except ValueError as e:
-            logging.error(f"NASA APOD içeriği oluşturulurken veya zamanlanırken bir değer hatası oluştu: {e}")
-        except Exception as e:
-            logging.error(f"NASA APOD içeriği oluşturulurken veya zamanlanırken beklenmedik bir hata oluştu: {e}")
+            try:
+                logging.info(f"NASA APOD için 'post_nasa_apod_logic' çağrılıyor. Zaman: {schedule_times[0]}")
+                result = post_nasa_apod_logic(schedule_time=schedule_times[0])
+                if result:
+                    logging.info(f"NASA APOD içeriği başarıyla oluşturuldu ve {schedule_times[0]} tarihine zamanlandı.")
+                else:
+                    logging.warning(f"NASA APOD içeriği oluşturulamadı veya atlandı. Zaman: {schedule_times[0]}")
+            except ValueError as e:
+                logging.error(f"NASA APOD içeriği oluşturulurken veya zamanlanırken bir değer hatası oluştu: {e}")
+            except Exception as e:
+                logging.error(f"NASA APOD içeriği oluşturulurken veya zamanlanırken beklenmedik bir hata oluştu: {e}")
 
         # 2. Mevcut yazıları tekrar kontrol etmeye gerek yok, en başta aldık
         logging.info("\n=== 2/4: Mevcut Yazılar Kontrol Ediliyor (Adım atlandı, başlangıçta yapıldı) ===\n")
@@ -1391,9 +1391,9 @@ def trigger_daily_content_generation():
                 )
                 
                 if success:
-                logging.info(f"\n--- Konu '{topic}' Başarıyla Zamanlandı: {post_schedule_time} ---\n")
-                published_google_posts += 1 # Başarılı yayın sayısını artır
-                existing_titles.append(topic) # Gelecek kontroller için listeye ekle
+                    logging.info(f"\n--- Konu '{topic}' Başarıyla Zamanlandı: {post_schedule_time} ---\n")
+                    published_google_posts += 1 # Başarılı yayın sayısını artır
+                    existing_titles.append(topic) # Gelecek kontroller için listeye ekle
                 else:
                     logging.warning(f"'{topic}' konusu için içerik üretilemedi.")
 
@@ -1470,18 +1470,15 @@ def scheduler_loop():
         if now.hour == 13 and now.minute == 46:
             # Bugün daha önce çalıştı mı kontrol et
             if last_execution_date != current_date:
-            logging.info("Zaman geldi! Otomatik içerik üretimi tetikleniyor...")
-            # Ana görevi ayrı bir thread'de başlat ki ana döngüyü bloklamasın
-            trigger_thread = threading.Thread(target=trigger_daily_content_generation)
-            trigger_thread.start()
+                logging.info("Zaman geldi! Otomatik içerik üretimi tetikleniyor...")
+                # Ana görevi ayrı bir thread'de başlat ki ana döngüyü bloklamasın
+                trigger_thread = threading.Thread(target=trigger_daily_content_generation)
+                trigger_thread.start()
                 # Bugün çalıştığını işaretle
                 last_execution_date = current_date
                 logging.info(f"Günlük işlem tamamlandı. Bir sonraki çalışma: {(now + timedelta(days=1)).strftime('%Y-%m-%d 13:46')}")
-            # Görevin aynı dakika içinde tekrar tetiklenmemesi için 61 saniye bekle
-            time.sleep(61)
-        else:
-                # Bugün zaten çalıştı, sadece 10 saniye bekle
-                time.sleep(10)
+                # Görevin aynı dakika içinde tekrar tetiklenmemesi için 61 saniye bekle
+                time.sleep(61)
         else:
             # Bir sonraki kontrol için 10 saniye bekle (daha sık ping için)
             time.sleep(10)
